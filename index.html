@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>FloraForge</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Procedural Plant Mesh Tool</p>
+          <h1>FloraForge</h1>
+        </div>
+        <div class="topbar-actions">
+          <button class="icon-button" id="randomizeSeed" type="button" title="새 시드">↻</button>
+          <button class="export-button" data-export="obj" type="button">OBJ</button>
+          <button class="export-button" data-export="glb" type="button">GLB</button>
+          <button class="export-button" data-export="fbx" type="button">FBX</button>
+        </div>
+      </header>
+
+      <aside class="panel controls-panel" aria-label="생성 설정">
+        <section class="control-section">
+          <div class="section-title">
+            <h2>구성 양식</h2>
+          </div>
+          <div class="segmented" role="group" aria-label="식물 구성 양식">
+            <button class="preset-button is-active" data-preset="broadleaf" type="button">활엽수</button>
+            <button class="preset-button" data-preset="conifer" type="button">침엽수</button>
+            <button class="preset-button" data-preset="shrub" type="button">관목</button>
+          </div>
+        </section>
+
+        <section class="control-section">
+          <div class="section-title">
+            <h2>형태</h2>
+          </div>
+          <label class="field">
+            <span>시드 <output id="seedValue"></output></span>
+            <input data-param="seed" type="number" min="1" max="999999" step="1">
+          </label>
+          <label class="field">
+            <span>전체 높이 <output id="heightValue"></output></span>
+            <input data-param="height" type="range" min="2.5" max="14" step="0.1">
+          </label>
+          <label class="field">
+            <span>줄기 굵기 <output id="trunkRadiusValue"></output></span>
+            <input data-param="trunkRadius" type="range" min="0.08" max="0.55" step="0.01">
+          </label>
+          <label class="field">
+            <span>줄기 테이퍼 <output id="trunkTaperValue"></output></span>
+            <input data-param="trunkTaper" type="range" min="0.25" max="0.92" step="0.01">
+          </label>
+          <label class="field">
+            <span>줄기 휘어짐 <output id="trunkCurveValue"></output></span>
+            <input data-param="trunkCurve" type="range" min="0" max="1" step="0.01">
+          </label>
+        </section>
+
+        <section class="control-section">
+          <div class="section-title">
+            <h2>가지 구조</h2>
+          </div>
+          <label class="field">
+            <span>가지 층수 <output id="branchLevelsValue"></output></span>
+            <input data-param="branchLevels" type="range" min="2" max="14" step="1">
+          </label>
+          <label class="field">
+            <span>분기 빈도 <output id="branchFrequencyValue"></output></span>
+            <input data-param="branchFrequency" type="range" min="0" max="1" step="0.01">
+          </label>
+          <label class="field">
+            <span>분기 밀도 <output id="branchDensityValue"></output></span>
+            <input data-param="branchDensity" type="range" min="0" max="1" step="0.01">
+          </label>
+          <label class="field">
+            <span>가지 각도 <output id="branchAngleValue"></output></span>
+            <input data-param="branchAngle" type="range" min="18" max="82" step="1">
+          </label>
+          <label class="field">
+            <span>가지 길이 <output id="branchLengthValue"></output></span>
+            <input data-param="branchLength" type="range" min="0.25" max="1" step="0.01">
+          </label>
+          <label class="field">
+            <span>수관 폭 <output id="crownWidthValue"></output></span>
+            <input data-param="crownWidth" type="range" min="0.35" max="1.15" step="0.01">
+          </label>
+        </section>
+      </aside>
+
+      <main class="viewport-panel" aria-label="식물 메시 미리보기">
+        <canvas id="plantCanvas" width="1200" height="900"></canvas>
+        <div class="viewport-hud">
+          <span id="meshStats">0 vertices · 0 faces</span>
+          <label class="toggle">
+            <input data-param="wireframe" type="checkbox">
+            <span>와이어</span>
+          </label>
+        </div>
+      </main>
+
+      <aside class="panel modules-panel" aria-label="부품 모듈">
+        <section class="control-section">
+          <div class="section-title">
+            <h2>잎 모듈</h2>
+          </div>
+          <div class="module-grid" id="leafModules">
+            <button class="module-option is-active" data-module-type="leafModule" data-module="oval" type="button">
+              <span class="module-thumb leaf-oval"></span>
+              <span>타원엽</span>
+            </button>
+            <button class="module-option" data-module-type="leafModule" data-module="lobed" type="button">
+              <span class="module-thumb leaf-lobed"></span>
+              <span>갈래잎</span>
+            </button>
+            <button class="module-option" data-module-type="leafModule" data-module="needle" type="button">
+              <span class="module-thumb leaf-needle"></span>
+              <span>침엽</span>
+            </button>
+            <button class="module-option" data-module-type="leafModule" data-module="blade" type="button">
+              <span class="module-thumb leaf-blade"></span>
+              <span>선형엽</span>
+            </button>
+          </div>
+          <label class="field">
+            <span>잎 밀도 <output id="leafDensityValue"></output></span>
+            <input data-param="leafDensity" type="range" min="0" max="1" step="0.01">
+          </label>
+          <label class="field">
+            <span>잎 크기 <output id="leafSizeValue"></output></span>
+            <input data-param="leafSize" type="range" min="0.12" max="0.75" step="0.01">
+          </label>
+          <label class="color-field">
+            <span>잎 색</span>
+            <input data-param="leafColor" type="color">
+          </label>
+        </section>
+
+        <section class="control-section">
+          <div class="section-title">
+            <h2>꽃·열매 모듈</h2>
+          </div>
+          <div class="module-grid" id="flowerModules">
+            <button class="module-option is-active" data-module-type="flowerModule" data-module="none" type="button">
+              <span class="module-thumb flower-none"></span>
+              <span>없음</span>
+            </button>
+            <button class="module-option" data-module-type="flowerModule" data-module="blossom" type="button">
+              <span class="module-thumb flower-blossom"></span>
+              <span>꽃잎</span>
+            </button>
+            <button class="module-option" data-module-type="flowerModule" data-module="bell" type="button">
+              <span class="module-thumb flower-bell"></span>
+              <span>종꽃</span>
+            </button>
+            <button class="module-option" data-module-type="flowerModule" data-module="berry" type="button">
+              <span class="module-thumb flower-berry"></span>
+              <span>열매</span>
+            </button>
+            <button class="module-option" data-module-type="flowerModule" data-module="cone" type="button">
+              <span class="module-thumb flower-cone"></span>
+              <span>구과</span>
+            </button>
+          </div>
+          <label class="field">
+            <span>부착 밀도 <output id="flowerDensityValue"></output></span>
+            <input data-param="flowerDensity" type="range" min="0" max="1" step="0.01">
+          </label>
+          <label class="field">
+            <span>부품 크기 <output id="flowerSizeValue"></output></span>
+            <input data-param="flowerSize" type="range" min="0.08" max="0.55" step="0.01">
+          </label>
+          <label class="color-field">
+            <span>부품 색</span>
+            <input data-param="flowerColor" type="color">
+          </label>
+        </section>
+
+        <section class="control-section">
+          <div class="section-title">
+            <h2>재질</h2>
+          </div>
+          <label class="color-field">
+            <span>수피 색</span>
+            <input data-param="barkColor" type="color">
+          </label>
+          <label class="color-field">
+            <span>보조 잎 색</span>
+            <input data-param="leafAccentColor" type="color">
+          </label>
+        </section>
+      </aside>
+    </div>
+
+    <script src="app.js"></script>
+  </body>
+</html>
