@@ -6,6 +6,8 @@
 
 `index.html`을 브라우저에서 열면 바로 실행됩니다.
 
+테스트 페이지: https://floraforge.pages.dev
+
 ## 기능
 
 - 활엽수, 침엽수, 관목 프리셋
