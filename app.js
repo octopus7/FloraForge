@@ -610,43 +610,52 @@
   }
 
   function addCurvedCylinder(mesh, points, radiusStart, radiusEnd, sides, material) {
-    for (let i = 0; i < points.length - 1; i += 1) {
-      const t0 = i / (points.length - 1);
-      const t1 = (i + 1) / (points.length - 1);
-      addCylinder(mesh, points[i], points[i + 1], lerp(radiusStart, radiusEnd, t0), lerp(radiusStart, radiusEnd, t1), sides, material);
-    }
-  }
-
-  function addCylinder(mesh, start, end, radiusStart, radiusEnd, sides, material) {
-    const axis = sub(end, start);
-    if (length(axis) < 0.0001) {
+    if (points.length < 2) {
       return;
     }
-    const direction = normalize(axis);
-    const basis = basisFromDirection(direction);
-    const startRing = [];
-    const endRing = [];
 
-    for (let i = 0; i < sides; i += 1) {
-      const angle = (i / sides) * TWO_PI;
-      const offsetStart = add(scaleVec(basis.u, Math.cos(angle) * radiusStart), scaleVec(basis.v, Math.sin(angle) * radiusStart));
-      const offsetEnd = add(scaleVec(basis.u, Math.cos(angle) * radiusEnd), scaleVec(basis.v, Math.sin(angle) * radiusEnd));
-      startRing.push(mesh.addVertex(add(start, offsetStart)));
-      endRing.push(mesh.addVertex(add(end, offsetEnd)));
+    const rings = [];
+    let carriedU = null;
+
+    for (let pointIndex = 0; pointIndex < points.length; pointIndex += 1) {
+      const t = pointIndex / (points.length - 1);
+      const tangent = tangentAtPathIndex(points, pointIndex);
+      let u = carriedU ? sub(carriedU, scaleVec(tangent, dot(carriedU, tangent))) : basisFromDirection(tangent).u;
+      if (length(u) < 0.0001) {
+        u = safePerpendicular(tangent);
+      }
+      u = normalize(u);
+      const v = normalize(cross(u, tangent));
+      carriedU = u;
+
+      const radius = lerp(radiusStart, radiusEnd, t);
+      const ring = [];
+      for (let sideIndex = 0; sideIndex < sides; sideIndex += 1) {
+        const angle = (sideIndex / sides) * TWO_PI;
+        const offset = add(scaleVec(u, Math.cos(angle) * radius), scaleVec(v, Math.sin(angle) * radius));
+        ring.push(mesh.addVertex(add(points[pointIndex], offset)));
+      }
+      rings.push(ring);
     }
 
-    for (let i = 0; i < sides; i += 1) {
-      const next = (i + 1) % sides;
-      mesh.addFace(startRing[i], endRing[i], endRing[next], material);
-      mesh.addFace(startRing[i], endRing[next], startRing[next], material);
+    for (let ringIndex = 0; ringIndex < rings.length - 1; ringIndex += 1) {
+      const current = rings[ringIndex];
+      const nextRing = rings[ringIndex + 1];
+      for (let sideIndex = 0; sideIndex < sides; sideIndex += 1) {
+        const nextSide = (sideIndex + 1) % sides;
+        mesh.addFace(current[sideIndex], nextRing[sideIndex], nextRing[nextSide], material);
+        mesh.addFace(current[sideIndex], nextRing[nextSide], current[nextSide], material);
+      }
     }
 
-    const startCenter = mesh.addVertex(start);
-    const endCenter = mesh.addVertex(end);
-    for (let i = 0; i < sides; i += 1) {
-      const next = (i + 1) % sides;
-      mesh.addFace(startCenter, startRing[next], startRing[i], material);
-      mesh.addFace(endCenter, endRing[i], endRing[next], material);
+    const startCenter = mesh.addVertex(points[0]);
+    const endCenter = mesh.addVertex(points[points.length - 1]);
+    const startRing = rings[0];
+    const endRing = rings[rings.length - 1];
+    for (let sideIndex = 0; sideIndex < sides; sideIndex += 1) {
+      const nextSide = (sideIndex + 1) % sides;
+      mesh.addFace(startCenter, startRing[nextSide], startRing[sideIndex], material);
+      mesh.addFace(endCenter, endRing[sideIndex], endRing[nextSide], material);
     }
   }
 
@@ -1112,6 +1121,16 @@ ${connections}
     const f = clamped * (path.length - 1);
     const index = Math.min(path.length - 2, Math.floor(f));
     return mix(path[index], path[index + 1], f - index);
+  }
+
+  function tangentAtPathIndex(path, index) {
+    const previous = path[Math.max(0, index - 1)];
+    const next = path[Math.min(path.length - 1, index + 1)];
+    const tangent = sub(next, previous);
+    if (length(tangent) < 0.0001 && index > 0) {
+      return normalize(sub(path[index], path[index - 1]));
+    }
+    return normalize(tangent);
   }
 
   function basisFromDirection(direction) {
