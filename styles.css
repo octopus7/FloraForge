@@ -22,9 +22,15 @@
   box-sizing: border-box;
 }
 
+html {
+  height: 100%;
+  overflow: hidden;
+}
+
 body {
-  min-height: 100vh;
+  height: 100dvh;
   margin: 0;
+  overflow: hidden;
   background:
     linear-gradient(135deg, rgba(212, 155, 52, 0.13), transparent 34%),
     linear-gradient(315deg, rgba(206, 107, 84, 0.11), transparent 28%),
@@ -46,7 +52,9 @@ button {
   grid-template-columns: 320px minmax(360px, 1fr) 300px;
   grid-template-rows: auto minmax(0, 1fr);
   gap: 14px;
-  min-height: 100vh;
+  height: 100dvh;
+  min-height: 0;
+  overflow: hidden;
   padding: 14px;
 }
 
@@ -101,6 +109,7 @@ h2 {
 .panel,
 .viewport-panel {
   min-height: 0;
+  min-width: 0;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.9);
@@ -110,6 +119,7 @@ h2 {
 .controls-panel,
 .modules-panel {
   overflow: auto;
+  overscroll-behavior: contain;
   padding: 14px;
 }
 
@@ -229,7 +239,7 @@ input[type="color"] {
   display: block;
   width: 100%;
   height: 100%;
-  min-height: 560px;
+  min-height: 0;
   touch-action: none;
 }
 
@@ -445,10 +455,22 @@ input[type="color"] {
 @media (max-width: 1120px) {
   .app-shell {
     grid-template-columns: 300px minmax(360px, 1fr);
+    grid-template-rows: auto minmax(0, 1fr) minmax(0, 260px);
+  }
+
+  .controls-panel {
+    grid-column: 1;
+    grid-row: 2 / 4;
+  }
+
+  .viewport-panel {
+    grid-column: 2;
+    grid-row: 2;
   }
 
   .modules-panel {
-    grid-column: 1 / -1;
+    grid-column: 2;
+    grid-row: 3;
     display: grid;
     grid-template-columns: repeat(3, minmax(220px, 1fr));
     gap: 16px;
@@ -467,7 +489,7 @@ input[type="color"] {
 @media (max-width: 760px) {
   .app-shell {
     grid-template-columns: 1fr;
-    grid-template-rows: auto;
+    grid-template-rows: auto minmax(0, 1fr) minmax(0, 0.85fr) minmax(0, 0.85fr);
     padding: 10px;
   }
 
@@ -490,8 +512,23 @@ input[type="color"] {
     max-height: none;
   }
 
+  .controls-panel {
+    grid-column: 1;
+    grid-row: 3;
+  }
+
+  .viewport-panel {
+    grid-column: 1;
+    grid-row: 2;
+  }
+
+  .modules-panel {
+    grid-column: 1;
+    grid-row: 4;
+  }
+
   #plantCanvas {
-    min-height: 460px;
+    min-height: 0;
   }
 
   .modules-panel .control-section {

@@ -113,7 +113,8 @@
       this.meta = {
         branches: 0,
         leaves: 0,
-        flowers: 0
+        flowers: 0,
+        junctions: 0
       };
       this.bounds = {
         min: vec(0, 0, 0),
@@ -410,9 +411,15 @@
         config.height * (config.style === "shrub" ? randRange(rng, 0.72, 1.04) : randRange(rng, 0.96, 1.04));
       const stemRadius = config.trunkRadius * (config.style === "shrub" ? randRange(rng, 0.56, 0.86) : 1);
       const lean = config.style === "shrub" ? randRange(rng, 0.08, 0.22) : randRange(rng, 0.01, 0.08);
-      const path = buildStem(mesh, config, rng, base, stemHeight, stemRadius, stemAngle, lean);
-      addBranches(mesh, config, rng, path, stemHeight, stemRadius);
-      addTerminalGrowth(mesh, config, rng, path[path.length - 1], normalize(sub(path[path.length - 1], path[path.length - 2])));
+      const stem = buildStem(mesh, config, rng, base, stemHeight, stemRadius, stemAngle, lean);
+      addBranches(mesh, config, rng, stem, stemHeight, stemRadius);
+      addTerminalGrowth(
+        mesh,
+        config,
+        rng,
+        stem.path[stem.path.length - 1],
+        normalize(sub(stem.path[stem.path.length - 1], stem.path[stem.path.length - 2]))
+      );
     }
 
     computeBounds(mesh);
@@ -439,11 +446,12 @@
     }
 
     const topRadius = Math.max(radius * 0.08, radius * (1 - config.trunkTaper * 0.86));
-    addCurvedCylinder(mesh, path, radius, topRadius, config.style === "shrub" ? 7 : 10, "bark");
-    return path;
+    const tube = addCurvedCylinder(mesh, path, radius, topRadius, config.style === "shrub" ? 7 : 10, "bark");
+    return { path, tube };
   }
 
-  function addBranches(mesh, config, rng, path, height, trunkRadius) {
+  function addBranches(mesh, config, rng, stem, height, trunkRadius) {
+    const path = stem.path;
     const levelCount = Math.max(1, Math.round(config.branchLevels));
     const levelStart = config.style === "broadleaf" ? 0.28 : config.style === "conifer" ? 0.16 : 0.12;
     const levelEnd = config.style === "conifer" ? 0.95 : 0.9;
@@ -480,19 +488,21 @@
               : 0.32 + Math.sin(stemT * Math.PI) * 0.88;
         const length = height * 0.24 * config.branchLength * config.crownWidth * crownFactor * randRange(rng, 0.72, 1.14);
         const radius = trunkRadius * Math.pow(1 - stemT, 1.08) * randRange(rng, 0.34, 0.52);
-        addBranch(mesh, config, rng, origin, direction, length, radius, 0, stemT);
+        addBranch(mesh, config, rng, origin, direction, length, radius, 0, stemT, stem.tube, stemT);
       }
     }
   }
 
-  function addBranch(mesh, config, rng, origin, direction, length, radius, depth, tierRatio) {
+  function addBranch(mesh, config, rng, origin, direction, length, radius, depth, tierRatio, parentTube = null, parentT = 0) {
     if (length < 0.08 || radius < 0.008 || mesh.meta.branches > 560) {
       return;
     }
 
     mesh.meta.branches += 1;
     const steps = depth === 0 ? 4 : 3;
-    const path = [origin];
+    const junctionBase = parentTube ? getJunctionBasePoint(mesh, parentTube, parentT, direction) : null;
+    const branchOrigin = junctionBase || origin;
+    const path = [branchOrigin];
     const bendSide = safePerpendicular(direction);
     const bendAmount = randRange(rng, -0.18, 0.18) * length * (0.45 + config.trunkCurve);
     const arch =
@@ -502,13 +512,18 @@
 
     for (let i = 1; i <= steps; i += 1) {
       const t = i / steps;
-      const basePoint = add(origin, scaleVec(direction, length * t));
+      const basePoint = add(branchOrigin, scaleVec(direction, length * t));
       const bend = scaleVec(bendSide, Math.sin(t * Math.PI) * bendAmount);
       const lift = vec(0, Math.sin(t * Math.PI) * arch * (depth === 0 ? 1 : 0.55), 0);
       path.push(add(add(basePoint, bend), lift));
     }
 
-    addCurvedCylinder(mesh, path, radius, Math.max(radius * 0.18, 0.006), depth === 0 ? 7 : 6, "bark");
+    const branchTube = addCurvedCylinder(mesh, path, radius, Math.max(radius * 0.18, 0.006), depth === 0 ? 7 : 6, "bark", {
+      capStart: !parentTube
+    });
+    if (parentTube) {
+      addJunctionBridge(mesh, parentTube, parentT, branchTube, direction, "bark");
+    }
 
     if (config.leafModule === "needle") {
       for (let i = 1; i < path.length; i += 1) {
@@ -547,7 +562,9 @@
           length * randRange(rng, 0.36, 0.62) * (1 - depth * 0.13),
           radius * randRange(rng, 0.45, 0.6),
           depth + 1,
-          tierRatio
+          tierRatio,
+          branchTube,
+          t
         );
       }
     }
@@ -656,11 +673,14 @@
     };
   }
 
-  function addCurvedCylinder(mesh, points, radiusStart, radiusEnd, sides, material) {
+  function addCurvedCylinder(mesh, points, radiusStart, radiusEnd, sides, material, options = {}) {
     if (points.length < 2) {
-      return;
+      return { frames: [], material, path: points, rings: [], sides };
     }
 
+    const capStart = options.capStart !== false;
+    const capEnd = options.capEnd !== false;
+    const frames = [];
     const rings = [];
     let carriedU = null;
 
@@ -676,6 +696,13 @@
       carriedU = u;
 
       const radius = lerp(radiusStart, radiusEnd, t);
+      frames.push({
+        center: points[pointIndex],
+        tangent,
+        u,
+        v,
+        radius
+      });
       const ring = [];
       for (let sideIndex = 0; sideIndex < sides; sideIndex += 1) {
         const angle = (sideIndex / sides) * TWO_PI;
@@ -695,15 +722,115 @@
       }
     }
 
-    const startCenter = mesh.addVertex(points[0]);
-    const endCenter = mesh.addVertex(points[points.length - 1]);
     const startRing = rings[0];
     const endRing = rings[rings.length - 1];
-    for (let sideIndex = 0; sideIndex < sides; sideIndex += 1) {
-      const nextSide = (sideIndex + 1) % sides;
-      mesh.addFace(startCenter, startRing[nextSide], startRing[sideIndex], material);
-      mesh.addFace(endCenter, endRing[sideIndex], endRing[nextSide], material);
+
+    if (capStart) {
+      const startCenter = mesh.addVertex(points[0]);
+      for (let sideIndex = 0; sideIndex < sides; sideIndex += 1) {
+        const nextSide = (sideIndex + 1) % sides;
+        mesh.addFace(startCenter, startRing[nextSide], startRing[sideIndex], material);
+      }
     }
+
+    if (capEnd) {
+      const endCenter = mesh.addVertex(points[points.length - 1]);
+      for (let sideIndex = 0; sideIndex < sides; sideIndex += 1) {
+        const nextSide = (sideIndex + 1) % sides;
+        mesh.addFace(endCenter, endRing[sideIndex], endRing[nextSide], material);
+      }
+    }
+
+    return { frames, material, path: points, rings, sides };
+  }
+
+  function getJunctionBasePoint(mesh, parentTube, parentT, direction) {
+    const sample = sampleTubeRing(parentTube, parentT);
+    if (!sample) {
+      return null;
+    }
+
+    const radial = projectDirectionOntoPlane(direction, sample.frame.tangent, sample.frame.u);
+    const sideIndex = nearestRingSide(mesh, sample.ring, sample.frame, radial);
+    return mesh.vertices[sample.ring[sideIndex]];
+  }
+
+  function addJunctionBridge(mesh, parentTube, parentT, childTube, childDirection, material) {
+    const parent = sampleTubeRing(parentTube, parentT);
+    const child = sampleTubeRing(childTube, 0);
+    if (!parent || !child || parent.ring.length < 3 || child.ring.length < 3) {
+      return;
+    }
+
+    const attachDirection = projectDirectionOntoPlane(sub(child.frame.center, parent.frame.center), parent.frame.tangent, childDirection);
+    const parentSideIndex = nearestRingSide(mesh, parent.ring, parent.frame, attachDirection);
+    const childBackDirection = projectDirectionOntoPlane(
+      sub(parent.frame.center, child.frame.center),
+      child.frame.tangent,
+      scaleVec(childDirection, -1)
+    );
+    const childSideIndex = nearestRingSide(mesh, child.ring, child.frame, childBackDirection);
+    let bridgeCount = Math.min(5, parent.ring.length, child.ring.length);
+    if (bridgeCount % 2 === 0) {
+      bridgeCount -= 1;
+    }
+    bridgeCount = Math.max(3, bridgeCount);
+
+    const parentArc = ringArc(parent.ring, parentSideIndex, bridgeCount);
+    let childArc = ringArc(child.ring, childSideIndex, bridgeCount);
+    const reversedChildArc = [...childArc].reverse();
+    if (arcDistance(mesh, parentArc, reversedChildArc) < arcDistance(mesh, parentArc, childArc)) {
+      childArc = reversedChildArc;
+    }
+
+    for (let i = 0; i < bridgeCount - 1; i += 1) {
+      mesh.addFace(parentArc[i], childArc[i], childArc[i + 1], material);
+      mesh.addFace(parentArc[i], childArc[i + 1], parentArc[i + 1], material);
+    }
+    mesh.meta.junctions += 1;
+  }
+
+  function sampleTubeRing(tube, t) {
+    if (!tube || !tube.rings.length || !tube.frames.length) {
+      return null;
+    }
+    const ringIndex = clamp(Math.round(clamp(t, 0, 1) * (tube.rings.length - 1)), 0, tube.rings.length - 1);
+    return {
+      frame: tube.frames[ringIndex],
+      ring: tube.rings[ringIndex],
+      ringIndex
+    };
+  }
+
+  function nearestRingSide(mesh, ring, frame, direction) {
+    let bestIndex = 0;
+    let bestScore = -Infinity;
+    for (let i = 0; i < ring.length; i += 1) {
+      const radial = normalize(sub(mesh.vertices[ring[i]], frame.center));
+      const score = dot(radial, direction);
+      if (score > bestScore) {
+        bestScore = score;
+        bestIndex = i;
+      }
+    }
+    return bestIndex;
+  }
+
+  function ringArc(ring, centerIndex, count) {
+    const arc = [];
+    const half = Math.floor(count / 2);
+    for (let offset = -half; offset <= half; offset += 1) {
+      arc.push(ring[wrapIndex(centerIndex + offset, ring.length)]);
+    }
+    return arc;
+  }
+
+  function arcDistance(mesh, a, b) {
+    let total = 0;
+    for (let i = 0; i < Math.min(a.length, b.length); i += 1) {
+      total += length(sub(mesh.vertices[a[i]], mesh.vertices[b[i]]));
+    }
+    return total;
   }
 
   function addPlanarPart(mesh, center, direction, scaleValue, points, material) {
@@ -896,7 +1023,7 @@
 
   function updateStats() {
     const mesh = state.mesh;
-    meshStats.textContent = `${mesh.vertices.length.toLocaleString()} vertices · ${mesh.faces.length.toLocaleString()} faces · ${mesh.meta.branches.toLocaleString()} branches · ${mesh.meta.leaves.toLocaleString()} leaves`;
+    meshStats.textContent = `${mesh.vertices.length.toLocaleString()} vertices · ${mesh.faces.length.toLocaleString()} faces · ${mesh.meta.branches.toLocaleString()} branches · ${mesh.meta.junctions.toLocaleString()} junctions · ${mesh.meta.leaves.toLocaleString()} leaves`;
   }
 
   function exportMesh(format) {
@@ -1187,6 +1314,17 @@ ${connections}
     return normalize(sub(after, before));
   }
 
+  function projectDirectionOntoPlane(direction, normal, fallback) {
+    let projected = sub(direction, scaleVec(normal, dot(direction, normal)));
+    if (length(projected) < 0.0001) {
+      projected = sub(fallback, scaleVec(normal, dot(fallback, normal)));
+    }
+    if (length(projected) < 0.0001) {
+      projected = safePerpendicular(normal);
+    }
+    return normalize(projected);
+  }
+
   function basisFromDirection(direction) {
     const reference = Math.abs(direction.y) < 0.92 ? vec(0, 1, 0) : vec(1, 0, 0);
     const u = normalize(cross(direction, reference));
@@ -1294,6 +1432,10 @@ ${connections}
 
   function fixed(value) {
     return Number(value).toFixed(6).replace(/\.?0+$/, "");
+  }
+
+  function wrapIndex(index, lengthValue) {
+    return ((index % lengthValue) + lengthValue) % lengthValue;
   }
 
   function align4(value) {
