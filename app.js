@@ -552,28 +552,75 @@
       }
     }
 
-    addFoliageCluster(mesh, config, rng, path[path.length - 1], direction, length, depth);
+    if (config.leafModule !== "needle") {
+      addDistributedFoliage(mesh, config, rng, path, length, depth);
+    }
+
+    addFoliageCluster(mesh, config, rng, path[path.length - 1], direction, length, depth, {
+      densityScale: config.leafModule === "needle" ? 1 : depth === 0 ? 0.5 : 0.66,
+      sizeScale: config.leafModule === "needle" ? 1 : 0.9,
+      spreadScale: config.leafModule === "needle" ? 1 : 1.08,
+      flowerScale: config.leafModule === "needle" ? 1 : 0.72
+    });
   }
 
   function addTerminalGrowth(mesh, config, rng, position, direction) {
-    const count = config.style === "conifer" ? 9 : 5;
+    const count = config.style === "conifer" ? 9 : config.style === "shrub" ? 2 : 3;
     for (let i = 0; i < count; i += 1) {
       const dir = normalize(add(direction, randomConeVector(rng, 0.7)));
-      addFoliageCluster(mesh, config, rng, add(position, scaleVec(dir, config.leafSize * 0.3)), dir, config.leafSize, 2);
+      addFoliageCluster(mesh, config, rng, add(position, scaleVec(dir, config.leafSize * 0.3)), dir, config.leafSize, 2, {
+        densityScale: config.style === "conifer" ? 1 : 0.52,
+        sizeScale: config.style === "conifer" ? 1 : 0.88,
+        spreadScale: 1.1,
+        flowerScale: 0.58
+      });
     }
   }
 
-  function addFoliageCluster(mesh, config, rng, anchor, direction, branchLength, depth) {
+  function addDistributedFoliage(mesh, config, rng, path, branchLength, depth) {
+    const sampleCount = Math.round(
+      lerp(1, config.style === "shrub" ? 5 : 4, config.leafDensity) * (depth === 0 ? 1.12 : 0.82)
+    );
+    const startT = depth === 0 ? (config.style === "shrub" ? 0.3 : 0.48) : 0.24;
+    const endT = 0.9;
+
+    for (let i = 0; i < sampleCount; i += 1) {
+      const t = lerp(startT, endT, (i + randRange(rng, 0.18, 0.82)) / sampleCount);
+      if (rng() > config.leafDensity * (config.style === "shrub" ? 0.98 : 0.84)) {
+        continue;
+      }
+
+      const tangent = tangentAtPathRatio(path, t);
+      const side = rotateAroundAxis(safePerpendicular(tangent), tangent, rng() * TWO_PI);
+      const anchor = add(pointOnPath(path, t), scaleVec(side, config.leafSize * randRange(rng, 0.32, 0.95)));
+      const outward = normalize(add(add(scaleVec(tangent, 0.34), scaleVec(side, 0.78)), vec(0, randRange(rng, 0.06, 0.28), 0)));
+
+      addFoliageCluster(mesh, config, rng, anchor, outward, branchLength * 0.25, depth + 1, {
+        densityScale: depth === 0 ? 0.36 : 0.48,
+        sizeScale: depth === 0 ? 0.76 : 0.84,
+        spreadScale: 0.72,
+        flowerScale: 0.38
+      });
+    }
+  }
+
+  function addFoliageCluster(mesh, config, rng, anchor, direction, branchLength, depth, options = {}) {
     const leafFactory = partModules.leaf[config.leafModule] || partModules.leaf.oval;
+    const densityScale = options.densityScale ?? 1;
+    const sizeScale = options.sizeScale ?? 1;
+    const spreadScale = options.spreadScale ?? 1;
+    const flowerScale = options.flowerScale ?? densityScale;
+    const effectiveLeafDensity = clamp(config.leafDensity * densityScale, 0, 1);
     const maxLeaves = config.leafModule === "needle" ? 4 + config.leafDensity * 8 : 3 + config.leafDensity * 12;
-    const leafCount = Math.round(config.leafDensity * maxLeaves);
-    const clusterRadius = config.leafSize * (config.style === "shrub" ? 1.0 : 1.25) * (depth > 1 ? 0.8 : 1);
+    const leafCount = Math.round(effectiveLeafDensity * maxLeaves);
+    const clusterRadius = config.leafSize * sizeScale * spreadScale * (config.style === "shrub" ? 1.0 : 1.25) * (depth > 1 ? 0.8 : 1);
 
     for (let i = 0; i < leafCount; i += 1) {
       const outward = normalize(add(direction, randomConeVector(rng, 0.82)));
       const position = add(anchor, scaleVec(randomConeVector(rng, 1), clusterRadius * randRange(rng, 0.08, 0.58)));
       const scaleValue =
         config.leafSize *
+        sizeScale *
         randRange(rng, 0.72, 1.22) *
         (config.leafModule === "needle" ? 0.72 : 1) *
         (config.style === "conifer" ? 0.9 : 1);
@@ -585,14 +632,14 @@
 
     const flowerFactory = partModules.flower[config.flowerModule] || partModules.flower.none;
     if (config.flowerModule !== "none") {
-      const flowerCount = Math.round(config.flowerDensity * Math.max(1, leafCount) * 0.42);
+      const flowerCount = Math.round(config.flowerDensity * flowerScale * Math.max(1, leafCount) * 0.42);
       for (let i = 0; i < flowerCount; i += 1) {
         const outward = normalize(add(direction, randomConeVector(rng, 0.92)));
         const position = add(
           anchor,
           add(scaleVec(outward, config.leafSize * randRange(rng, 0.25, 0.8)), scaleVec(randomConeVector(rng, 1), clusterRadius * 0.25))
         );
-        flowerFactory(mesh, position, outward, config.flowerSize * randRange(rng, 0.78, 1.22), config, rng);
+        flowerFactory(mesh, position, outward, config.flowerSize * sizeScale * randRange(rng, 0.78, 1.22), config, rng);
       }
     }
   }
@@ -1131,6 +1178,13 @@ ${connections}
       return normalize(sub(path[index], path[index - 1]));
     }
     return normalize(tangent);
+  }
+
+  function tangentAtPathRatio(path, t) {
+    const delta = 1 / Math.max(8, path.length * 3);
+    const before = pointOnPath(path, clamp(t - delta, 0, 1));
+    const after = pointOnPath(path, clamp(t + delta, 0, 1));
+    return normalize(sub(after, before));
   }
 
   function basisFromDirection(direction) {
