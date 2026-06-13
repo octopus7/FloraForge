@@ -1,0 +1,22 @@
+# Unity generated files
+FloraForgeUnity/Library/
+FloraForgeUnity/Temp/
+FloraForgeUnity/Obj/
+FloraForgeUnity/Build/
+FloraForgeUnity/Builds/
+FloraForgeUnity/Logs/
+FloraForgeUnity/UserSettings/
+FloraForgeUnity/MemoryCaptures/
+FloraForgeUnity/*.csproj
+FloraForgeUnity/*.sln
+FloraForgeUnity/*.user
+FloraForgeUnity/*.pidb
+FloraForgeUnity/*.booproj
+FloraForgeUnity/*.svd
+FloraForgeUnity/*.pdb
+FloraForgeUnity/*.mdb
+FloraForgeUnity/*.opendb
+FloraForgeUnity/*.VC.db
+
+# Local Unity CLI logs
+unity-create.log
