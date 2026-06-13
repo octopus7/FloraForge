@@ -8,7 +8,7 @@ namespace FloraForge
     public sealed class FloraForgeVegetationGenerator : MonoBehaviour
     {
         private const string GeneratedRootName = "__FloraForgeGenerated";
-        private const int GeneratorVersion = 14;
+        private const int GeneratorVersion = 19;
 
         [Header("Generation")]
         public int seed = 4751;
@@ -27,6 +27,10 @@ namespace FloraForge
         [Range(0, 12)] public int shrubCount = 6;
         [Range(0.25f, 1.8f)] public float shrubRadius = 0.9f;
         [Range(0.0f, 1.0f)] public float shrubFlowerRatio = 0.55f;
+
+        [Header("Ornamental Shrubs")]
+        [Range(0, 8)] public int ornamentalShrubCount = 3;
+        [Range(0.35f, 1.6f)] public float ornamentalShrubRadius = 0.95f;
 
         [Header("Wildflowers")]
         [Range(0, 12)] public int wildflowerClumps = 5;
@@ -104,7 +108,7 @@ namespace FloraForge
             CreateGrass(root.transform, rng, materials);
             CreateClimbingVines(root.transform, rng, materials);
             CreateHangingVines(root.transform, rng, materials);
-            CreateShrubs(root.transform, rng, materials);
+            CreateOrnamentalShrubs(root.transform, rng, materials);
             CreateWildflowers(root.transform, rng, materials);
 
 #if UNITY_EDITOR
@@ -215,6 +219,318 @@ namespace FloraForge
                         CreateFlower(parent, end, RandomRange(rng, 0.08f, 0.14f), rng, materials, Random01(rng) < 0.5f ? materials.FlowerPink : materials.FlowerPurple);
                     }
                 }
+            }
+        }
+
+        private void CreateOrnamentalShrubs(Transform parent, System.Random rng, FloraMaterials materials)
+        {
+            if (ornamentalShrubCount <= 0)
+            {
+                return;
+            }
+
+            for (var i = 0; i < ornamentalShrubCount; i++)
+            {
+                var x = Mathf.Lerp(-2.8f, 2.8f, ornamentalShrubCount <= 1 ? 0.5f : i / (float)(ornamentalShrubCount - 1));
+                x += RandomRange(rng, -0.22f, 0.22f);
+                var center = new Vector3(x, 0.02f, RandomRange(rng, -1.45f, -0.82f));
+                var radius = ornamentalShrubRadius * RandomRange(rng, 0.78f, 1.14f);
+                var height = radius * RandomRange(rng, 0.72f, 0.92f);
+                CreateOrnamentalShrub(parent, center, radius, height, rng, materials);
+            }
+        }
+
+        private static void CreateOrnamentalShrub(Transform parent, Vector3 center, float radius, float height, System.Random rng, FloraMaterials materials)
+        {
+            var shrub = new GameObject("Ornamental Shrub");
+            shrub.transform.SetParent(parent, false);
+
+            var backLeafCount = Mathf.RoundToInt(radius * 340.0f);
+            var frontLeafCount = Mathf.RoundToInt(radius * 460.0f);
+            CreateShrubLeafShell(shrub.transform, center, radius, height, backLeafCount, false, rng, materials);
+            CreateShrubLeafShell(shrub.transform, center, radius * 0.92f, height * 0.96f, frontLeafCount, true, rng, materials);
+            CreateShrubEdgeLeaves(shrub.transform, center, radius, height, RandomRangeInt(rng, 66, 88), rng, materials);
+
+            var highlightClusterCount = RandomRangeInt(rng, 6, 10);
+            for (var i = 0; i < highlightClusterCount; i++)
+            {
+                var x = RandomRange(rng, -radius * 0.58f, radius * 0.58f);
+                var y = RandomRange(rng, height * 0.42f, height * 0.92f);
+                var domeMask = Mathf.Sqrt(Mathf.Max(0.0f, 1.0f - Mathf.Pow((y / height - 0.48f) / 0.58f, 2.0f)));
+                x = Mathf.Clamp(x, -radius * domeMask * 0.85f, radius * domeMask * 0.85f);
+                var clusterCenter = center + new Vector3(x, y, -radius * RandomRange(rng, 0.24f, 0.42f));
+                CreateOrnamentalLeafCluster(shrub.transform, clusterCenter, radius * RandomRange(rng, 0.12f, 0.19f), rng, materials);
+            }
+
+            var crownCount = RandomRangeInt(rng, 4, 7);
+            for (var i = 0; i < crownCount; i++)
+            {
+                var angle = RandomRange(rng, Mathf.PI * 0.08f, Mathf.PI * 0.92f);
+                var horizontal = Mathf.Lerp(-radius * 0.78f, radius * 0.78f, i / Mathf.Max(1.0f, crownCount - 1.0f));
+                horizontal += RandomRange(rng, -radius * 0.18f, radius * 0.18f);
+                var y = RandomRange(rng, height * 0.48f, height * 0.9f);
+                var z = -0.08f - Mathf.Sin(angle) * radius * RandomRange(rng, 0.18f, 0.32f);
+                var flowerCenter = center + new Vector3(horizontal, y + radius * 0.04f, z - radius * 0.38f);
+                var flowerMaterial = Random01(rng) < 0.55f ? materials.FlowerPink : materials.FlowerCream;
+                CreateSmallFlowerCluster(shrub.transform, flowerCenter, radius * RandomRange(rng, 0.18f, 0.28f), rng, materials, flowerMaterial);
+            }
+        }
+
+        private static void CreateShrubDomeFill(Transform parent, Vector3 center, float radius, float height, Material material)
+        {
+            const int rows = 10;
+            const int cols = 13;
+            var vertices = new Vector3[(rows + 1) * cols];
+            var uvs = new Vector2[vertices.Length];
+            var triangles = new List<int>(rows * (cols - 1) * 6);
+
+            for (var y = 0; y <= rows; y++)
+            {
+                var v = y / (float)rows;
+                var widthMask = Mathf.Sqrt(Mathf.Max(0.0f, 1.0f - Mathf.Pow((v - 0.43f) / 0.62f, 2.0f)));
+                var rowWidth = radius * widthMask;
+                var rowCenter = center + new Vector3(0.0f, height * v, Mathf.Sin(v * Mathf.PI) * -radius * 0.08f);
+
+                for (var x = 0; x < cols; x++)
+                {
+                    var u = x / (float)(cols - 1);
+                    var lateral = (u - 0.5f) * 2.0f;
+                    var frontCurve = (1.0f - lateral * lateral) * Mathf.Sin(v * Mathf.PI) * -radius * 0.12f;
+                    var index = y * cols + x;
+                    vertices[index] = rowCenter + new Vector3(lateral * rowWidth, 0.0f, frontCurve);
+                    uvs[index] = new Vector2(u, v);
+                }
+            }
+
+            for (var y = 0; y < rows; y++)
+            {
+                for (var x = 0; x < cols - 1; x++)
+                {
+                    var a = y * cols + x;
+                    var b = y * cols + x + 1;
+                    var c = (y + 1) * cols + x;
+                    var d = (y + 1) * cols + x + 1;
+                    triangles.Add(a);
+                    triangles.Add(c);
+                    triangles.Add(b);
+                    triangles.Add(b);
+                    triangles.Add(c);
+                    triangles.Add(d);
+                }
+            }
+
+            var mesh = CreateTwoSidedMesh("Ornamental Shrub Dome Mesh", vertices, uvs, triangles.ToArray());
+            var go = new GameObject("Ornamental Shrub Fill");
+            go.transform.SetParent(parent, false);
+            go.AddComponent<MeshFilter>().sharedMesh = mesh;
+            go.AddComponent<MeshRenderer>().sharedMaterial = material;
+        }
+
+        private static void CreateShrubLeafShell(Transform parent, Vector3 center, float radius, float height, int leafCount, bool frontLayer, System.Random rng, FloraMaterials materials)
+        {
+            for (var i = 0; i < leafCount; i++)
+            {
+                var u = RandomRange(rng, -1.0f, 1.0f);
+                var y01 = frontLayer ? RandomRange(rng, 0.14f, 0.98f) : RandomRange(rng, 0.2f, 0.94f);
+                var domeWidth = Mathf.Sqrt(Mathf.Max(0.0f, 1.0f - Mathf.Pow((y01 - 0.46f) / 0.58f, 2.0f)));
+                var localX = u * radius * domeWidth * RandomRange(rng, 0.82f, 1.04f);
+                var localY = y01 * height;
+                var frontPush = frontLayer ? RandomRange(rng, -0.54f, -0.28f) : RandomRange(rng, -0.24f, -0.08f);
+                var localZ = frontPush * radius + RandomRange(rng, -0.05f, 0.05f);
+                var position = center + new Vector3(localX, localY, localZ);
+
+                var outward2D = new Vector2(localX / Mathf.Max(0.01f, radius), (y01 - 0.43f) * 1.5f);
+                if (outward2D.sqrMagnitude < 0.001f)
+                {
+                    outward2D = new Vector2(RandomSigned(rng) * 0.25f, 1.0f);
+                }
+
+                outward2D.Normalize();
+                var swirl = RandomRange(rng, -0.42f, 0.42f);
+                var up2D = new Vector2(
+                    outward2D.x * Mathf.Cos(swirl) - outward2D.y * Mathf.Sin(swirl),
+                    outward2D.x * Mathf.Sin(swirl) + outward2D.y * Mathf.Cos(swirl));
+                var size = radius * RandomRange(rng, frontLayer ? 0.062f : 0.058f, frontLayer ? 0.118f : 0.104f);
+                var material = frontLayer
+                    ? materials.GetOrnamentalLeafMaterial(Random01(rng) < 0.62f)
+                    : materials.GetDarkLeafMaterial(Random01(rng) < 0.5f);
+                CreateFacingOvalLeaf(parent, position, up2D, size, RandomRange(rng, 0.72f, 1.18f), RandomRange(rng, 0.0f, 0.2f), rng, material);
+            }
+        }
+
+        private static void CreateShrubEdgeLeaves(Transform parent, Vector3 center, float radius, float height, int leafCount, System.Random rng, FloraMaterials materials)
+        {
+            for (var i = 0; i < leafCount; i++)
+            {
+                var sideSign = i % 2 == 0 ? -1.0f : 1.0f;
+                var y01 = RandomRange(rng, 0.06f, 0.9f);
+                if (i > leafCount * 0.72f)
+                {
+                    y01 = RandomRange(rng, 0.78f, 1.0f);
+                    sideSign = RandomSigned(rng);
+                }
+
+                var domeWidth = Mathf.Sqrt(Mathf.Max(0.0f, 1.0f - Mathf.Pow((y01 - 0.46f) / 0.58f, 2.0f)));
+                var localX = sideSign * radius * domeWidth * RandomRange(rng, 0.88f, 1.08f);
+                if (y01 > 0.78f)
+                {
+                    localX = RandomRange(rng, -radius * domeWidth, radius * domeWidth);
+                }
+
+                var localY = y01 * height + RandomRange(rng, -0.03f, 0.03f);
+                var position = center + new Vector3(localX, localY, -radius * RandomRange(rng, 0.34f, 0.56f));
+                var up2D = new Vector2(localX / Mathf.Max(0.01f, radius), (y01 - 0.42f) * 1.45f);
+                if (up2D.sqrMagnitude < 0.001f)
+                {
+                    up2D = Vector2.up;
+                }
+
+                up2D.Normalize();
+                var material = Random01(rng) < 0.72f
+                    ? materials.GetDarkLeafMaterial(Random01(rng) < 0.45f)
+                    : materials.GetOrnamentalLeafMaterial(Random01(rng) < 0.5f);
+                CreateFacingOvalLeaf(parent, position, up2D, radius * RandomRange(rng, 0.075f, 0.128f), RandomRange(rng, 0.76f, 1.12f), 0.14f, rng, material);
+            }
+        }
+
+        private static void CreateOrnamentalLeafCluster(Transform parent, Vector3 center, float radius, System.Random rng, FloraMaterials materials)
+        {
+            var leafCount = RandomRangeInt(rng, 8, 13);
+            for (var i = 0; i < leafCount; i++)
+            {
+                var angle = i / (float)leafCount * Mathf.PI * 2.0f + RandomRange(rng, -0.18f, 0.18f);
+                var up2D = new Vector2(Mathf.Cos(angle), Mathf.Sin(angle));
+                var position = center + new Vector3(up2D.x, up2D.y, RandomRange(rng, -0.18f, 0.04f)) * radius * RandomRange(rng, 0.04f, 0.2f);
+                var material = materials.GetOrnamentalLeafMaterial(Random01(rng) < 0.75f);
+                CreateFacingOvalLeaf(parent, position, up2D, radius * RandomRange(rng, 0.68f, 1.0f), RandomRange(rng, 0.78f, 1.18f), 0.16f, rng, material);
+            }
+        }
+
+        private static void CreateFacingOvalLeaf(Transform parent, Vector3 center, Vector2 up2D, float size, float widthScale, float tilt, System.Random rng, Material material)
+        {
+            if (up2D.sqrMagnitude < 0.001f)
+            {
+                up2D = Vector2.up;
+            }
+
+            up2D.Normalize();
+            var up = new Vector3(up2D.x, up2D.y, 0.0f);
+            var normal = (Vector3.back + new Vector3(RandomRange(rng, -tilt, tilt), RandomRange(rng, -tilt, tilt), 0.0f)).normalized;
+            var side = Vector3.Cross(up, normal);
+            if (side.sqrMagnitude < 0.001f)
+            {
+                side = Vector3.right;
+            }
+
+            CreateOvalLeafCard(parent, center, up, side.normalized, size, widthScale, rng, material);
+        }
+
+        private static void CreateOvalLeafCard(Transform parent, Vector3 center, Vector3 up, Vector3 side, float size, float widthScale, System.Random rng, Material material)
+        {
+            if (up.sqrMagnitude < 0.001f)
+            {
+                up = Vector3.up;
+            }
+
+            if (side.sqrMagnitude < 0.001f)
+            {
+                side = Vector3.right;
+            }
+
+            up.Normalize();
+            side.Normalize();
+            var normal = Vector3.Cross(side, up);
+            if (normal.sqrMagnitude < 0.001f)
+            {
+                normal = Vector3.forward;
+            }
+
+            normal.Normalize();
+            side = Vector3.Cross(up, normal).normalized;
+
+            const int rows = 6;
+            const int cols = 5;
+            var length = size * RandomRange(rng, 1.05f, 1.38f);
+            var maxWidth = size * widthScale * RandomRange(rng, 0.36f, 0.48f);
+            var basePoint = center - up * length * 0.34f;
+            var vertices = new Vector3[(rows + 1) * cols];
+            var uvs = new Vector2[vertices.Length];
+            var triangles = new List<int>(rows * (cols - 1) * 6);
+
+            for (var y = 0; y <= rows; y++)
+            {
+                var t = y / (float)rows;
+                var profile = Mathf.Pow(LeafBodyMask(t), 0.58f);
+                var rowWidth = maxWidth * profile * Mathf.Lerp(0.88f, 1.0f, t);
+                var rowCenter = basePoint + up * (length * t) + normal * (Mathf.Sin(t * Mathf.PI) * size * 0.06f);
+
+                for (var x = 0; x < cols; x++)
+                {
+                    var u = x / (float)(cols - 1);
+                    var lateral = (u - 0.5f) * 2.0f;
+                    var edgeAmount = Mathf.Abs(lateral);
+                    var cup = -edgeAmount * edgeAmount * Mathf.Sin(t * Mathf.PI) * size * 0.04f;
+                    var index = y * cols + x;
+                    vertices[index] = rowCenter + side * (lateral * rowWidth) + normal * cup;
+                    uvs[index] = new Vector2(u, t);
+                }
+            }
+
+            for (var y = 0; y < rows; y++)
+            {
+                for (var x = 0; x < cols - 1; x++)
+                {
+                    var a = y * cols + x;
+                    var b = y * cols + x + 1;
+                    var c = (y + 1) * cols + x;
+                    var d = (y + 1) * cols + x + 1;
+                    triangles.Add(a);
+                    triangles.Add(c);
+                    triangles.Add(b);
+                    triangles.Add(b);
+                    triangles.Add(c);
+                    triangles.Add(d);
+                }
+            }
+
+            var mesh = CreateTwoSidedMesh("Ornamental Leaf Mesh", vertices, uvs, triangles.ToArray());
+            var go = new GameObject("Ornamental Leaf");
+            go.transform.SetParent(parent, false);
+            go.AddComponent<MeshFilter>().sharedMesh = mesh;
+            go.AddComponent<MeshRenderer>().sharedMaterial = material;
+        }
+
+        private static void CreateSmallFlowerCluster(Transform parent, Vector3 center, float radius, System.Random rng, FloraMaterials materials, Material material)
+        {
+            var count = RandomRangeInt(rng, 18, 32);
+            var normal = (Vector3.back + RandomXZ(rng, 0.08f)).normalized;
+            var forward = Vector3.ProjectOnPlane(Vector3.up, normal).normalized;
+            if (forward.sqrMagnitude < 0.001f)
+            {
+                forward = Vector3.up;
+            }
+
+            var side = Vector3.Cross(normal, forward).normalized;
+
+            for (var i = 0; i < count; i++)
+            {
+                var angle = RandomRange(rng, 0.0f, Mathf.PI * 2.0f);
+                var distance = Mathf.Sqrt(Random01(rng)) * radius;
+                var position = center
+                    + side * (Mathf.Cos(angle) * distance)
+                    + forward * (Mathf.Sin(angle) * distance * 0.66f)
+                    + normal * RandomRange(rng, -radius * 0.05f, radius * 0.08f);
+                CreateFlowerDisc(parent, position, normal, forward, radius * RandomRange(rng, 0.12f, 0.2f), material);
+            }
+
+            for (var i = 0; i < 4; i++)
+            {
+                var angle = i / 4.0f * Mathf.PI * 2.0f + RandomRange(rng, -0.2f, 0.2f);
+                var position = center
+                    + side * (Mathf.Cos(angle) * radius * 0.24f)
+                    + forward * (Mathf.Sin(angle) * radius * 0.16f)
+                    + normal * radius * 0.04f;
+                CreateFlowerDisc(parent, position, normal, forward, radius * RandomRange(rng, 0.15f, 0.22f), material);
             }
         }
 
@@ -944,9 +1260,15 @@ namespace FloraForge
             public readonly Material LeafLobedB = Create("FloraForge Leaf Lobed B", new Color(0.58f, 0.78f, 0.54f), LoadTexture(LeafLobedTexturePath));
             public readonly Material LeafLanceolateA = Create("FloraForge Leaf Lanceolate A", new Color(0.72f, 0.9f, 0.66f), LoadTexture(LeafLanceolateTexturePath));
             public readonly Material LeafLanceolateB = Create("FloraForge Leaf Lanceolate B", new Color(0.52f, 0.72f, 0.5f), LoadTexture(LeafLanceolateTexturePath));
+            public readonly Material OrnamentalLeafLight = Create("FloraForge Ornamental Leaf Light", new Color(0.9f, 1.05f, 0.38f), LoadTexture(LeafOvateTexturePath));
+            public readonly Material OrnamentalLeafMid = Create("FloraForge Ornamental Leaf Mid", new Color(0.62f, 0.9f, 0.28f), LoadTexture(LeafOvateTexturePath));
+            public readonly Material OrnamentalLeafDark = Create("FloraForge Ornamental Leaf Dark", new Color(0.24f, 0.56f, 0.16f), LoadTexture(LeafLobedTexturePath));
+            public readonly Material OrnamentalLeafDeep = Create("FloraForge Ornamental Leaf Deep", new Color(0.13f, 0.34f, 0.11f), LoadTexture(LeafLobedTexturePath));
+            public readonly Material OrnamentalShrubFill = Create("FloraForge Ornamental Shrub Fill", new Color(0.09f, 0.25f, 0.08f));
             public readonly Material FlowerPink = Create("FloraForge Flower Pink", new Color(0.95f, 0.28f, 0.58f), LoadTexture(FlowerPetalPinkTexturePath), true);
             public readonly Material FlowerPurple = Create("FloraForge Flower Purple", new Color(0.62f, 0.22f, 0.78f), LoadTexture(FlowerPetalPurpleTexturePath), true);
             public readonly Material FlowerYellow = Create("FloraForge Flower Yellow", new Color(0.96f, 0.82f, 0.18f), LoadTexture(FlowerPetalYellowTexturePath), true);
+            public readonly Material FlowerCream = Create("FloraForge Flower Cream", new Color(1.0f, 0.88f, 0.5f));
             public readonly Material FlowerCenter = Create("FloraForge Flower Center", new Color(0.95f, 0.68f, 0.16f), LoadTexture(FlowerCenterTexturePath), true);
             public readonly Material Sepal = Create("FloraForge Sepal", new Color(0.18f, 0.42f, 0.16f));
             public readonly Material Wood = Create("FloraForge Wood", new Color(0.38f, 0.24f, 0.16f));
@@ -968,6 +1290,16 @@ namespace FloraForge
                 }
 
                 return alternate ? LeafOvateB : LeafOvateA;
+            }
+
+            public Material GetOrnamentalLeafMaterial(bool alternate)
+            {
+                return alternate ? OrnamentalLeafLight : OrnamentalLeafMid;
+            }
+
+            public Material GetDarkLeafMaterial(bool alternate)
+            {
+                return alternate ? OrnamentalLeafDark : OrnamentalLeafDeep;
             }
 
             private static Material Create(string name, Color color, Texture texture = null, bool preserveTextureColor = false)
