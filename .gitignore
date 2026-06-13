@@ -22,3 +22,7 @@ FloraForgeUnity/*.VC.db
 unity-create.log
 unity-import*.log
 unity-create-demo-scene.log
+
+# Local visual QA captures
+captures/
+FloraForgeCaptureProject/
