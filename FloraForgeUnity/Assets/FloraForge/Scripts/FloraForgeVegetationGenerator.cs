@@ -8,7 +8,7 @@ namespace FloraForge
     public sealed class FloraForgeVegetationGenerator : MonoBehaviour
     {
         private const string GeneratedRootName = "__FloraForgeGenerated";
-        private const int GeneratorVersion = 7;
+        private const int GeneratorVersion = 14;
 
         [Header("Generation")]
         public int seed = 4751;
@@ -31,6 +31,10 @@ namespace FloraForge
         [Header("Wildflowers")]
         [Range(0, 12)] public int wildflowerClumps = 5;
         [Range(0.15f, 1.0f)] public float wildflowerHeight = 0.55f;
+
+        [Header("Grass")]
+        [Range(0, 48)] public int grassClumpCount = 28;
+        [Range(0.0f, 1.5f)] public float grassDensity = 1.0f;
 
         [SerializeField, HideInInspector] private int generatedVersion;
         private bool regenerateQueued;
@@ -97,6 +101,7 @@ namespace FloraForge
                 CreateReferenceFrame(root.transform, materials);
             }
 
+            CreateGrass(root.transform, rng, materials);
             CreateClimbingVines(root.transform, rng, materials);
             CreateHangingVines(root.transform, rng, materials);
             CreateShrubs(root.transform, rng, materials);
@@ -164,7 +169,7 @@ namespace FloraForge
                 }
 
                 var path = BuildVinePath(start, end, RandomRange(rng, 0.25f, 0.6f), 14, rng);
-                CreateTube(parent, "Climbing Vine", path, vineThickness * RandomRange(rng, 0.75f, 1.25f), 7, materials.Vine);
+                CreateTube(parent, "Climbing Vine", path, vineThickness * RandomRange(rng, 0.5f, 0.78f), 7, materials.Vine, 1.0f, 0.42f, 0.08f);
                 ScatterLeaves(parent, path, Mathf.RoundToInt(RandomRange(rng, 16, 28) * leafDensity), RandomRange(rng, 0.12f, 0.2f), rng, materials);
                 ScatterFlowers(parent, path, Mathf.RoundToInt(RandomRange(rng, 2, 7) * flowerDensity), rng, materials, materials.FlowerPink, materials.FlowerPurple);
             }
@@ -177,7 +182,7 @@ namespace FloraForge
                 var start = new Vector3(RandomRange(rng, -3.3f, 3.45f), RandomRange(rng, 2.85f, 3.42f), RandomRange(rng, -0.38f, -0.16f));
                 var end = start + new Vector3(RandomRange(rng, -0.25f, 0.25f), -RandomRange(rng, 0.7f, 1.7f), RandomRange(rng, -0.08f, 0.1f));
                 var path = BuildVinePath(start, end, RandomRange(rng, 0.12f, 0.35f), 10, rng);
-                CreateTube(parent, "Hanging Vine", path, vineThickness * RandomRange(rng, 0.5f, 0.95f), 6, materials.Vine);
+                CreateTube(parent, "Hanging Vine", path, vineThickness * RandomRange(rng, 0.34f, 0.58f), 6, materials.Vine, 0.95f, 0.2f, 0.04f);
                 ScatterLeaves(parent, path, Mathf.RoundToInt(RandomRange(rng, 8, 17) * leafDensity), RandomRange(rng, 0.1f, 0.17f), rng, materials);
 
                 if (Random01(rng) < flowerDensity)
@@ -202,7 +207,7 @@ namespace FloraForge
                     var length = RandomRange(rng, 0.35f, 1.05f) * shrubRadius;
                     var end = center + new Vector3(Mathf.Cos(angle) * length * 0.55f, RandomRange(rng, 0.3f, 0.9f), Mathf.Sin(angle) * length * 0.35f);
                     var path = BuildVinePath(center + RandomXZ(rng, 0.08f), end, RandomRange(rng, 0.05f, 0.18f), 5, rng);
-                    CreateTube(parent, "Shrub Stem", path, vineThickness * RandomRange(rng, 0.45f, 0.8f), 5, materials.Vine);
+                    CreateTube(parent, "Shrub Stem", path, vineThickness * RandomRange(rng, 0.24f, 0.42f), 5, materials.Vine, 0.95f, 0.24f, 0.05f);
                     ScatterLeaves(parent, path, RandomRangeInt(rng, 3, 8), RandomRange(rng, 0.14f, 0.25f), rng, materials);
 
                     if (Random01(rng) < shrubFlowerRatio)
@@ -225,10 +230,40 @@ namespace FloraForge
                     var start = center + RandomXZ(rng, 0.2f);
                     var end = start + new Vector3(RandomRange(rng, -0.06f, 0.06f), RandomRange(rng, 0.25f, wildflowerHeight), RandomRange(rng, -0.04f, 0.04f));
                     var path = BuildVinePath(start, end, 0.04f, 3, rng);
-                    CreateTube(parent, "Wildflower Stem", path, vineThickness * 0.34f, 5, materials.Vine);
-                    CreateLeafCard(parent, Vector3.Lerp(start, end, 0.45f), Vector3.up, RandomSigned(rng) * Vector3.right, RandomRange(rng, 0.08f, 0.13f), rng, Random01(rng) < 0.5f ? materials.LeafA : materials.LeafB);
+                    var stemTangent = (end - start).normalized;
+                    var leafNormal = RandomRadialAround(stemTangent, rng);
+                    var leafUp = (Vector3.up * RandomRange(rng, 0.45f, 0.75f) + leafNormal * RandomRange(rng, 0.35f, 0.65f)).normalized;
+                    var leafSide = Vector3.Cross(leafUp, leafNormal);
+                    if (leafSide.sqrMagnitude < 0.001f)
+                    {
+                        leafSide = Vector3.right;
+                    }
+
+                    leafSide.Normalize();
+                    CreateTube(parent, "Wildflower Stem", path, vineThickness * RandomRange(rng, 0.12f, 0.2f), 5, materials.Vine, 0.9f, 0.36f, 0.03f);
+                    CreateLeafCard(parent, Vector3.Lerp(start, end, 0.45f) + leafNormal * RandomRange(rng, 0.015f, 0.04f), leafUp, leafSide, RandomRange(rng, 0.08f, 0.13f), rng, materials);
                     CreateFlower(parent, end, RandomRange(rng, 0.05f, 0.09f), rng, materials, materials.FlowerYellow);
                 }
+            }
+        }
+
+        private void CreateGrass(Transform parent, System.Random rng, FloraMaterials materials)
+        {
+            if (grassClumpCount <= 0 || grassDensity <= 0.0f)
+            {
+                return;
+            }
+
+            var effectiveClumpCount = Mathf.CeilToInt(grassClumpCount * 1.25f);
+            for (var i = 0; i < effectiveClumpCount; i++)
+            {
+                var center = new Vector3(
+                    RandomRange(rng, -3.45f, 3.45f),
+                    0.02f,
+                    RandomRange(rng, -1.75f, -0.45f));
+                var clumpRadius = RandomRange(rng, 0.22f, 0.46f);
+                var bladeCount = Mathf.RoundToInt(RandomRange(rng, 16, 34) * grassDensity);
+                CreateGrassClump(parent, center, clumpRadius, bladeCount, rng, materials.Grass);
             }
         }
 
@@ -267,16 +302,17 @@ namespace FloraForge
             {
                 var t = RandomRange(rng, 0.06f, 0.96f);
                 var sample = SamplePath(path, t, out var tangent);
-                var side = Vector3.Cross(tangent, Vector3.up);
+                var tangentDirection = tangent.sqrMagnitude < 0.001f ? Vector3.up : tangent.normalized;
+                var leafNormal = RandomRadialAround(tangentDirection, rng);
+                var leafUp = (leafNormal * RandomRange(rng, 0.55f, 0.9f) + Vector3.up * RandomRange(rng, 0.25f, 0.55f) + tangentDirection * RandomRange(rng, 0.05f, 0.22f)).normalized;
+                var side = Vector3.Cross(leafUp, leafNormal);
                 if (side.sqrMagnitude < 0.001f)
                 {
                     side = Vector3.right;
                 }
 
                 side.Normalize();
-                side *= RandomSigned(rng);
-                var normal = Vector3.Lerp(Vector3.up, tangent.normalized, 0.25f).normalized;
-                CreateLeafCard(parent, sample + side * RandomRange(rng, 0.03f, 0.08f), normal, side, size * RandomRange(rng, 0.7f, 1.35f), rng, Random01(rng) < 0.55f ? materials.LeafA : materials.LeafB);
+                CreateLeafCard(parent, sample + leafNormal * RandomRange(rng, 0.03f, 0.08f), leafUp, side, size * RandomRange(rng, 0.7f, 1.35f), rng, materials);
             }
         }
 
@@ -294,23 +330,97 @@ namespace FloraForge
             }
         }
 
-        private static void CreateTube(Transform parent, string name, IReadOnlyList<Vector3> points, float radius, int radialSegments, Material material)
+        private static void CreateGrassClump(Transform parent, Vector3 center, float radius, int bladeCount, System.Random rng, Material material)
+        {
+            if (bladeCount <= 0)
+            {
+                return;
+            }
+
+            const int segments = 4;
+            var frontVertices = new List<Vector3>(bladeCount * (segments + 1) * 2);
+            var uvs = new List<Vector2>(frontVertices.Capacity);
+            var triangles = new List<int>(bladeCount * segments * 6);
+
+            for (var blade = 0; blade < bladeCount; blade++)
+            {
+                var angle = RandomRange(rng, 0.0f, Mathf.PI * 2.0f);
+                var distance = Mathf.Sqrt(Random01(rng)) * radius;
+                var basePoint = center + new Vector3(Mathf.Cos(angle) * distance, 0.0f, Mathf.Sin(angle) * distance * 0.58f);
+                var yaw = RandomRange(rng, 0.0f, Mathf.PI * 2.0f);
+                var side = new Vector3(Mathf.Cos(yaw), 0.0f, Mathf.Sin(yaw)).normalized;
+                var bendDirection = new Vector3(-side.z, 0.0f, side.x).normalized;
+                bendDirection = (bendDirection + RandomXZ(rng, 0.6f)).normalized;
+
+                var height = RandomRange(rng, 0.2f, 0.52f);
+                var width = RandomRange(rng, 0.026f, 0.055f);
+                var bend = RandomRange(rng, 0.025f, 0.15f);
+                var twist = RandomSigned(rng) * RandomRange(rng, 0.0f, 0.06f);
+                var startIndex = frontVertices.Count;
+
+                for (var y = 0; y <= segments; y++)
+                {
+                    var t = y / (float)segments;
+                    var taper = Mathf.Pow(1.0f - t, 1.35f);
+                    var bladeSide = (side + bendDirection * twist * t).normalized;
+                    var rowCenter = basePoint + Vector3.up * (height * t);
+                    rowCenter += bendDirection * (bend * t * t);
+                    rowCenter += side * (Mathf.Sin(t * Mathf.PI * 1.35f + blade) * width * 0.16f);
+                    var halfWidth = width * Mathf.Max(0.035f, taper) * 0.5f;
+
+                    frontVertices.Add(rowCenter - bladeSide * halfWidth);
+                    frontVertices.Add(rowCenter + bladeSide * halfWidth);
+                    uvs.Add(new Vector2(0.0f, t));
+                    uvs.Add(new Vector2(1.0f, t));
+                }
+
+                for (var y = 0; y < segments; y++)
+                {
+                    var a = startIndex + y * 2;
+                    var b = a + 1;
+                    var c = a + 2;
+                    var d = a + 3;
+
+                    triangles.Add(a);
+                    triangles.Add(c);
+                    triangles.Add(b);
+                    triangles.Add(b);
+                    triangles.Add(c);
+                    triangles.Add(d);
+                }
+            }
+
+            var mesh = CreateTwoSidedMesh("Grass Clump Mesh", frontVertices.ToArray(), uvs.ToArray(), triangles.ToArray());
+
+            var go = new GameObject("Grass Clump");
+            go.transform.SetParent(parent, false);
+            go.AddComponent<MeshFilter>().sharedMesh = mesh;
+            go.AddComponent<MeshRenderer>().sharedMaterial = material;
+        }
+
+        private static void CreateTube(Transform parent, string name, IReadOnlyList<Vector3> points, float radius, int radialSegments, Material material, float baseScale = 1.0f, float tipScale = 0.42f, float midBulge = 0.06f)
         {
             if (points.Count < 2)
             {
                 return;
             }
 
-            var vertices = new Vector3[points.Count * radialSegments];
+            var ringVertexCount = points.Count * radialSegments;
+            var startCenterIndex = ringVertexCount;
+            var endCenterIndex = ringVertexCount + 1;
+            var vertices = new Vector3[ringVertexCount + 2];
             var uvs = new Vector2[vertices.Length];
-            var triangles = new int[(points.Count - 1) * radialSegments * 6];
+            var triangles = new int[(points.Count - 1) * radialSegments * 6 + radialSegments * 6];
             var tri = 0;
 
             for (var i = 0; i < points.Count; i++)
             {
+                var t = i / (float)(points.Count - 1);
                 var tangent = GetPathTangent(points, i);
                 var rotation = RotationAlong(tangent);
-                var ringRadius = radius * Mathf.Lerp(1.15f, 0.65f, i / (float)(points.Count - 1));
+                var taper = Mathf.Lerp(baseScale, tipScale, Mathf.SmoothStep(0.0f, 1.0f, t));
+                var organicRipple = Mathf.Sin((t * 4.0f + radius * 31.0f) * Mathf.PI) * 0.025f;
+                var ringRadius = radius * Mathf.Max(0.12f, taper + Mathf.Sin(t * Mathf.PI) * midBulge + organicRipple);
 
                 for (var r = 0; r < radialSegments; r++)
                 {
@@ -318,9 +428,14 @@ namespace FloraForge
                     var offset = rotation * new Vector3(Mathf.Cos(angle) * ringRadius, Mathf.Sin(angle) * ringRadius, 0.0f);
                     var vertexIndex = i * radialSegments + r;
                     vertices[vertexIndex] = points[i] + offset;
-                    uvs[vertexIndex] = new Vector2(r / (float)radialSegments, i / (float)(points.Count - 1));
+                    uvs[vertexIndex] = new Vector2(r / (float)radialSegments, t);
                 }
             }
+
+            vertices[startCenterIndex] = points[0];
+            vertices[endCenterIndex] = points[points.Count - 1];
+            uvs[startCenterIndex] = new Vector2(0.5f, 0.0f);
+            uvs[endCenterIndex] = new Vector2(0.5f, 1.0f);
 
             for (var i = 0; i < points.Count - 1; i++)
             {
@@ -341,6 +456,20 @@ namespace FloraForge
                 }
             }
 
+            for (var r = 0; r < radialSegments; r++)
+            {
+                var nextR = (r + 1) % radialSegments;
+                triangles[tri++] = startCenterIndex;
+                triangles[tri++] = nextR;
+                triangles[tri++] = r;
+
+                var endA = (points.Count - 1) * radialSegments + r;
+                var endB = (points.Count - 1) * radialSegments + nextR;
+                triangles[tri++] = endCenterIndex;
+                triangles[tri++] = endA;
+                triangles[tri++] = endB;
+            }
+
             var mesh = new Mesh { name = name + " Mesh" };
             mesh.vertices = vertices;
             mesh.triangles = triangles;
@@ -354,7 +483,7 @@ namespace FloraForge
             go.AddComponent<MeshRenderer>().sharedMaterial = material;
         }
 
-        private static void CreateLeafCard(Transform parent, Vector3 center, Vector3 up, Vector3 side, float size, System.Random rng, Material material)
+        private static void CreateLeafCard(Transform parent, Vector3 center, Vector3 up, Vector3 side, float size, System.Random rng, FloraMaterials materials)
         {
             if (side.sqrMagnitude < 0.001f)
             {
@@ -379,6 +508,7 @@ namespace FloraForge
 
             var leafSize = size * 0.62f;
             var style = RandomRangeInt(rng, 0, 3);
+            var material = materials.GetLeafMaterial(style, Random01(rng) < 0.5f);
             var totalLength = leafSize * RandomRange(rng, 1.28f, 1.62f);
             var maxWidth = leafSize * RandomRange(rng, 0.45f, 0.68f);
             if (style == 1)
@@ -755,6 +885,27 @@ namespace FloraForge
             return new Vector3(Mathf.Cos(angle) * distance, 0.0f, Mathf.Sin(angle) * distance);
         }
 
+        private static Vector3 RandomRadialAround(Vector3 axis, System.Random rng)
+        {
+            if (axis.sqrMagnitude < 0.001f)
+            {
+                axis = Vector3.up;
+            }
+
+            axis.Normalize();
+            var reference = Mathf.Abs(Vector3.Dot(axis, Vector3.up)) > 0.86f ? Vector3.forward : Vector3.up;
+            var radialA = Vector3.Cross(axis, reference);
+            if (radialA.sqrMagnitude < 0.001f)
+            {
+                radialA = Vector3.right;
+            }
+
+            radialA.Normalize();
+            var radialB = Vector3.Cross(axis, radialA).normalized;
+            var angle = RandomRange(rng, 0.0f, Mathf.PI * 2.0f);
+            return (radialA * Mathf.Cos(angle) + radialB * Mathf.Sin(angle)).normalized;
+        }
+
         private static float RandomRange(System.Random rng, float min, float max)
         {
             return min + (float)rng.NextDouble() * (max - min);
@@ -777,13 +928,26 @@ namespace FloraForge
 
         private sealed class FloraMaterials
         {
+            private const string LeafOvateTexturePath = "Assets/FloraForge/Textures/leaf_surface_ovate_uv.png";
+            private const string LeafLobedTexturePath = "Assets/FloraForge/Textures/leaf_surface_lobed_uv.png";
+            private const string LeafLanceolateTexturePath = "Assets/FloraForge/Textures/leaf_surface_lanceolate_uv.png";
+            private const string FlowerPetalPinkTexturePath = "Assets/FloraForge/Textures/flower_petal_pink_uv.png";
+            private const string FlowerPetalPurpleTexturePath = "Assets/FloraForge/Textures/flower_petal_purple_uv.png";
+            private const string FlowerPetalYellowTexturePath = "Assets/FloraForge/Textures/flower_petal_yellow_uv.png";
+            private const string FlowerCenterTexturePath = "Assets/FloraForge/Textures/flower_center_uv.png";
+
             public readonly Material Vine = Create("FloraForge Vine", new Color(0.18f, 0.28f, 0.12f));
-            public readonly Material LeafA = Create("FloraForge Leaf A", new Color(0.18f, 0.38f, 0.17f));
-            public readonly Material LeafB = Create("FloraForge Leaf B", new Color(0.16f, 0.33f, 0.14f));
-            public readonly Material FlowerPink = Create("FloraForge Flower Pink", new Color(0.95f, 0.28f, 0.58f));
-            public readonly Material FlowerPurple = Create("FloraForge Flower Purple", new Color(0.62f, 0.22f, 0.78f));
-            public readonly Material FlowerYellow = Create("FloraForge Flower Yellow", new Color(0.96f, 0.82f, 0.18f));
-            public readonly Material FlowerCenter = Create("FloraForge Flower Center", new Color(0.95f, 0.68f, 0.16f));
+            public readonly Material Grass = Create("FloraForge Grass", Color.white, CreateGrassGradientTexture(), true);
+            public readonly Material LeafOvateA = Create("FloraForge Leaf Ovate A", new Color(0.78f, 0.96f, 0.72f), LoadTexture(LeafOvateTexturePath));
+            public readonly Material LeafOvateB = Create("FloraForge Leaf Ovate B", new Color(0.62f, 0.82f, 0.58f), LoadTexture(LeafOvateTexturePath));
+            public readonly Material LeafLobedA = Create("FloraForge Leaf Lobed A", new Color(0.78f, 0.94f, 0.7f), LoadTexture(LeafLobedTexturePath));
+            public readonly Material LeafLobedB = Create("FloraForge Leaf Lobed B", new Color(0.58f, 0.78f, 0.54f), LoadTexture(LeafLobedTexturePath));
+            public readonly Material LeafLanceolateA = Create("FloraForge Leaf Lanceolate A", new Color(0.72f, 0.9f, 0.66f), LoadTexture(LeafLanceolateTexturePath));
+            public readonly Material LeafLanceolateB = Create("FloraForge Leaf Lanceolate B", new Color(0.52f, 0.72f, 0.5f), LoadTexture(LeafLanceolateTexturePath));
+            public readonly Material FlowerPink = Create("FloraForge Flower Pink", new Color(0.95f, 0.28f, 0.58f), LoadTexture(FlowerPetalPinkTexturePath), true);
+            public readonly Material FlowerPurple = Create("FloraForge Flower Purple", new Color(0.62f, 0.22f, 0.78f), LoadTexture(FlowerPetalPurpleTexturePath), true);
+            public readonly Material FlowerYellow = Create("FloraForge Flower Yellow", new Color(0.96f, 0.82f, 0.18f), LoadTexture(FlowerPetalYellowTexturePath), true);
+            public readonly Material FlowerCenter = Create("FloraForge Flower Center", new Color(0.95f, 0.68f, 0.16f), LoadTexture(FlowerCenterTexturePath), true);
             public readonly Material Sepal = Create("FloraForge Sepal", new Color(0.18f, 0.42f, 0.16f));
             public readonly Material Wood = Create("FloraForge Wood", new Color(0.38f, 0.24f, 0.16f));
             public readonly Material WoodDark = Create("FloraForge Dark Wood", new Color(0.25f, 0.16f, 0.11f));
@@ -791,7 +955,22 @@ namespace FloraForge
             public readonly Material Ground = Create("FloraForge Ground", new Color(0.18f, 0.23f, 0.12f));
             public readonly Material Pot = Create("FloraForge Pot", new Color(0.62f, 0.34f, 0.2f));
 
-            private static Material Create(string name, Color color)
+            public Material GetLeafMaterial(int style, bool alternate)
+            {
+                if (style == 1)
+                {
+                    return alternate ? LeafLobedB : LeafLobedA;
+                }
+
+                if (style == 2)
+                {
+                    return alternate ? LeafLanceolateB : LeafLanceolateA;
+                }
+
+                return alternate ? LeafOvateB : LeafOvateA;
+            }
+
+            private static Material Create(string name, Color color, Texture texture = null, bool preserveTextureColor = false)
             {
                 var shader = Shader.Find("Universal Render Pipeline/Lit");
                 if (shader == null)
@@ -799,16 +978,33 @@ namespace FloraForge
                     shader = Shader.Find("Standard");
                 }
 
+                var materialColor = texture != null && preserveTextureColor ? Color.white : color;
                 var material = new Material(shader)
                 {
                     name = name,
-                    color = color,
+                    color = materialColor,
                     enableInstancing = true
                 };
 
                 if (material.HasProperty("_BaseColor"))
                 {
-                    material.SetColor("_BaseColor", color);
+                    material.SetColor("_BaseColor", materialColor);
+                }
+
+                if (texture != null)
+                {
+                    texture.wrapMode = TextureWrapMode.Clamp;
+                    texture.filterMode = FilterMode.Bilinear;
+
+                    if (material.HasProperty("_BaseMap"))
+                    {
+                        material.SetTexture("_BaseMap", texture);
+                    }
+
+                    if (material.HasProperty("_MainTex"))
+                    {
+                        material.SetTexture("_MainTex", texture);
+                    }
                 }
 
                 if (material.HasProperty("_Smoothness"))
@@ -817,6 +1013,63 @@ namespace FloraForge
                 }
 
                 return material;
+            }
+
+            private static Texture2D LoadTexture(string assetPath)
+            {
+#if UNITY_EDITOR
+                var texture = UnityEditor.AssetDatabase.LoadAssetAtPath<Texture2D>(assetPath);
+                if (texture == null)
+                {
+                    UnityEditor.AssetDatabase.ImportAsset(assetPath, UnityEditor.ImportAssetOptions.ForceSynchronousImport);
+                    texture = UnityEditor.AssetDatabase.LoadAssetAtPath<Texture2D>(assetPath);
+                }
+
+                return texture;
+#else
+                return null;
+#endif
+            }
+
+            private static Texture2D CreateGrassGradientTexture()
+            {
+                const int width = 16;
+                const int height = 96;
+                var texture = new Texture2D(width, height, TextureFormat.RGBA32, false)
+                {
+                    name = "FloraForge Grass Gradient",
+                    hideFlags = HideFlags.DontSave
+                };
+
+                var rootColor = new Color(0.08f, 0.2f, 0.07f);
+                var bodyColor = new Color(0.22f, 0.42f, 0.12f);
+                var tipColor = new Color(0.48f, 0.66f, 0.25f);
+
+                for (var y = 0; y < height; y++)
+                {
+                    var v = y / (float)(height - 1);
+                    var baseColor = v < 0.58f
+                        ? Color.Lerp(rootColor, bodyColor, v / 0.58f)
+                        : Color.Lerp(bodyColor, tipColor, (v - 0.58f) / 0.42f);
+
+                    for (var x = 0; x < width; x++)
+                    {
+                        var u = x / (float)(width - 1);
+                        var lateral = Mathf.Abs(u - 0.5f) * 2.0f;
+                        var centerHighlight = (1.0f - lateral) * Mathf.Sin(v * Mathf.PI) * 0.12f;
+                        var edgeShade = lateral * 0.1f;
+                        var noise = (Mathf.PerlinNoise(u * 7.0f, v * 16.0f) - 0.5f) * 0.06f;
+                        var color = baseColor;
+                        color.r = Mathf.Clamp01(color.r + centerHighlight + noise - edgeShade * 0.45f);
+                        color.g = Mathf.Clamp01(color.g + centerHighlight + noise - edgeShade * 0.25f);
+                        color.b = Mathf.Clamp01(color.b + noise - edgeShade * 0.35f);
+                        color.a = 1.0f;
+                        texture.SetPixel(x, y, color);
+                    }
+                }
+
+                texture.Apply(false, true);
+                return texture;
             }
         }
     }
