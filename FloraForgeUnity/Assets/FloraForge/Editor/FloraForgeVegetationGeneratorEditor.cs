@@ -101,19 +101,11 @@ public static class FloraForgeVegetationMenu
         var sun = sunObject.AddComponent<Light>();
         sun.type = LightType.Directional;
         sun.color = new Color(1.0f, 0.86f, 0.68f);
-        sun.intensity = 2.4f;
+        sun.intensity = 0.9f;
         sun.transform.rotation = Quaternion.Euler(42.0f, -34.0f, 0.0f);
 
-        var fillObject = new GameObject("Soft Fill Light");
-        var fill = fillObject.AddComponent<Light>();
-        fill.type = LightType.Point;
-        fill.color = new Color(0.55f, 0.72f, 1.0f);
-        fill.intensity = 0.85f;
-        fill.range = 5.5f;
-        fill.transform.position = new Vector3(-2.8f, 1.8f, -2.8f);
-
         RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Flat;
-        RenderSettings.ambientLight = new Color(0.27f, 0.3f, 0.25f);
+        RenderSettings.ambientLight = new Color(0.38f, 0.4f, 0.36f);
     }
 
     private static void EnsureFolder(string parent, string child)

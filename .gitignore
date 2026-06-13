@@ -20,3 +20,5 @@ FloraForgeUnity/*.VC.db
 
 # Local Unity CLI logs
 unity-create.log
+unity-import*.log
+unity-create-demo-scene.log
