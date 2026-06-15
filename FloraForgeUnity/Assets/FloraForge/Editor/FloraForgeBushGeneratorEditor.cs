@@ -21,6 +21,17 @@ public sealed class FloraForgeBushGeneratorEditor : Editor
 
         using (new EditorGUILayout.HorizontalScope())
         {
+            if (GUILayout.Button("Create Default Assets"))
+            {
+                foreach (var targetObject in targets)
+                {
+                    var bushGenerator = (FloraForgeBushGenerator)targetObject;
+                    Undo.RecordObject(bushGenerator, "Assign Default Bush Assets");
+                    FloraForgeBushAssetUtility.AssignDefaultAssets(bushGenerator);
+                    EditorUtility.SetDirty(bushGenerator.gameObject);
+                }
+            }
+
             if (GUILayout.Button("Create Scaffold Root"))
             {
                 foreach (var targetObject in targets)
@@ -82,6 +93,7 @@ public static class FloraForgeBushWorkbenchMenu
         Undo.RegisterCreatedObjectUndo(generatorObject, "Add FloraForge Bush Generator");
 
         var generator = generatorObject.AddComponent<FloraForgeBushGenerator>();
+        FloraForgeBushAssetUtility.AssignDefaultAssets(generator);
         Selection.activeGameObject = generatorObject;
         EditorSceneManager.MarkSceneDirty(SceneManager.GetActiveScene());
         return generator;
