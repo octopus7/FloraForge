@@ -9,6 +9,9 @@ public static class FloraForgeBushAssetUtility
     public const string DefaultLeafTexturePath = "Assets/FloraForge/Textures/BushDummyLeafTexture.asset";
     public const string DefaultLeafMaterialPath = "Assets/FloraForge/Materials/BushLeafMaterial.mat";
     public const string DefaultLeafShaderPath = "Assets/FloraForge/Shaders/FloraForgeBushLeaf.shader";
+    private const string DefaultLeafMeshName = "BushDummyLeaf";
+    private const string DefaultLeafTextureName = "BushDummyLeafTexture";
+    private const string DefaultLeafMaterialName = "BushLeafMaterial";
 
     [MenuItem("Tools/FloraForge/Bush/Create Default Bush Assets")]
     public static void CreateDefaultBushAssets()
@@ -60,13 +63,6 @@ public static class FloraForgeBushAssetUtility
 
     private static Mesh CreateOrUpdateDummyLeafMesh()
     {
-        var mesh = AssetDatabase.LoadAssetAtPath<Mesh>(DefaultLeafMeshPath);
-        if (mesh == null)
-        {
-            mesh = new Mesh { name = "Bush Dummy Leaf" };
-            AssetDatabase.CreateAsset(mesh, DefaultLeafMeshPath);
-        }
-
         const int rows = 9;
         const int cols = 5;
         const float length = 0.44f;
@@ -81,7 +77,7 @@ public static class FloraForgeBushAssetUtility
         for (var y = 0; y <= rows; y++)
         {
             var t = y / (float)rows;
-            var body = Mathf.Pow(Mathf.Sin(t * Mathf.PI), 0.58f);
+            var body = Mathf.Pow(Mathf.Max(0.0f, Mathf.Sin(t * Mathf.PI)), 0.58f);
             var asymmetry = Mathf.Lerp(0.76f, 1.08f, Mathf.SmoothStep(0.0f, 1.0f, 1.0f - Mathf.Abs(t - 0.46f) * 1.85f));
             var halfWidth = maxHalfWidth * body * asymmetry;
             var centerY = t * length;
@@ -118,14 +114,38 @@ public static class FloraForgeBushAssetUtility
             }
         }
 
-        mesh.Clear();
-        mesh.name = "Bush Dummy Leaf";
-        mesh.vertices = vertices;
-        mesh.normals = normals;
-        mesh.uv = uvs;
-        mesh.colors = colors;
-        mesh.triangles = triangles.ToArray();
+        var mesh = new Mesh
+        {
+            name = DefaultLeafMeshName
+        };
+
+        mesh.SetVertices(vertices);
+        mesh.SetNormals(normals);
+        mesh.SetUVs(0, uvs);
+        mesh.SetColors(colors);
+        mesh.SetTriangles(triangles, 0);
         mesh.RecalculateBounds();
+
+        if (mesh.vertexCount == 0 || mesh.GetIndexCount(0) == 0)
+        {
+            Debug.LogError("Failed to build BushDummyLeaf mesh data.");
+            return mesh;
+        }
+
+        // Recreate this generated asset after mesh data is complete. Creating an empty Mesh asset
+        // first can leave a zero-vertex asset behind if Unity reloads while this menu item runs.
+        AssetDatabase.DeleteAsset(DefaultLeafMeshPath);
+        AssetDatabase.CreateAsset(mesh, DefaultLeafMeshPath);
+        EditorUtility.SetDirty(mesh);
+        AssetDatabase.SaveAssetIfDirty(mesh);
+        AssetDatabase.ImportAsset(DefaultLeafMeshPath, ImportAssetOptions.ForceSynchronousImport);
+
+        var savedMesh = AssetDatabase.LoadAssetAtPath<Mesh>(DefaultLeafMeshPath);
+        if (savedMesh == null || savedMesh.vertexCount == 0)
+        {
+            Debug.LogError("BushDummyLeaf asset was created without vertex data.");
+        }
+
         return mesh;
     }
 
@@ -138,11 +158,12 @@ public static class FloraForgeBushAssetUtility
         {
             texture = new Texture2D(width, height, TextureFormat.RGBA32, false)
             {
-                name = "Bush Dummy Leaf Texture"
+                name = DefaultLeafTextureName
             };
             AssetDatabase.CreateAsset(texture, DefaultLeafTexturePath);
         }
 
+        texture.name = DefaultLeafTextureName;
         texture.wrapMode = TextureWrapMode.Clamp;
         texture.filterMode = FilterMode.Bilinear;
 
@@ -193,7 +214,7 @@ public static class FloraForgeBushAssetUtility
         {
             material = new Material(shader)
             {
-                name = "BushLeafMaterial"
+                name = DefaultLeafMaterialName
             };
             AssetDatabase.CreateAsset(material, DefaultLeafMaterialPath);
         }
@@ -202,6 +223,7 @@ public static class FloraForgeBushAssetUtility
             material.shader = shader;
         }
 
+        material.name = DefaultLeafMaterialName;
         material.SetTexture("_BaseMap", texture);
         material.SetColor("_BaseColor", Color.white);
         material.SetFloat("_ShadowMultiplier", 0.64f);

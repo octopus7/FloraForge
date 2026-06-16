@@ -28,6 +28,8 @@ public sealed class FloraForgeBushGeneratorEditor : Editor
                     var bushGenerator = (FloraForgeBushGenerator)targetObject;
                     Undo.RecordObject(bushGenerator, "Assign Default Bush Assets");
                     FloraForgeBushAssetUtility.AssignDefaultAssets(bushGenerator);
+                    Undo.RegisterFullObjectHierarchyUndo(bushGenerator.gameObject, "Generate Bush Preview");
+                    bushGenerator.Regenerate();
                     EditorUtility.SetDirty(bushGenerator.gameObject);
                 }
             }
@@ -94,6 +96,7 @@ public static class FloraForgeBushWorkbenchMenu
 
         var generator = generatorObject.AddComponent<FloraForgeBushGenerator>();
         FloraForgeBushAssetUtility.AssignDefaultAssets(generator);
+        generator.Regenerate();
         Selection.activeGameObject = generatorObject;
         EditorSceneManager.MarkSceneDirty(SceneManager.GetActiveScene());
         return generator;
