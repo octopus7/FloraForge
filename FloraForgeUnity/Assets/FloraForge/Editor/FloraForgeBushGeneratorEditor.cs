@@ -30,6 +30,7 @@ public sealed class FloraForgeBushGeneratorEditor : Editor
                     FloraForgeBushAssetUtility.AssignDefaultAssets(bushGenerator);
                     Undo.RegisterFullObjectHierarchyUndo(bushGenerator.gameObject, "Generate Bush Preview");
                     bushGenerator.Regenerate();
+                    EditorUtility.SetDirty(bushGenerator);
                     EditorUtility.SetDirty(bushGenerator.gameObject);
                 }
             }
@@ -41,6 +42,7 @@ public sealed class FloraForgeBushGeneratorEditor : Editor
                     var bushGenerator = (FloraForgeBushGenerator)targetObject;
                     Undo.RegisterFullObjectHierarchyUndo(bushGenerator.gameObject, "Create Bush Scaffold Root");
                     bushGenerator.Regenerate();
+                    EditorUtility.SetDirty(bushGenerator);
                     EditorUtility.SetDirty(bushGenerator.gameObject);
                 }
             }

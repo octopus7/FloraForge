@@ -5,6 +5,7 @@ Shader "FloraForge/Bush Leaf Vertex Color"
         _BaseMap ("Leaf Texture", 2D) = "white" {}
         _BaseColor ("Base Color", Color) = (1, 1, 1, 1)
         _ShadowMultiplier ("Shadow Multiplier", Range(0.35, 1.0)) = 0.65
+        _DebugVertexColor ("Debug Vertex Color", Float) = 0
     }
 
     SubShader
@@ -38,6 +39,7 @@ Shader "FloraForge/Bush Leaf Vertex Color"
                 float4 _BaseMap_ST;
                 half4 _BaseColor;
                 half _ShadowMultiplier;
+                half _DebugVertexColor;
             CBUFFER_END
 
             struct Attributes
@@ -66,6 +68,11 @@ Shader "FloraForge/Bush Leaf Vertex Color"
             half4 Frag(Varyings input) : SV_Target
             {
                 half4 textureColor = SAMPLE_TEXTURE2D(_BaseMap, sampler_BaseMap, input.uv);
+                if (_DebugVertexColor > 0.5h)
+                {
+                    return half4(input.color.rgb, 1.0h);
+                }
+
                 half depth = saturate(input.color.a);
                 half shade = lerp(_ShadowMultiplier, 1.0h, depth);
                 half3 finalColor = textureColor.rgb * _BaseColor.rgb * input.color.rgb * shade;

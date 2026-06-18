@@ -9,9 +9,11 @@ public static class FloraForgeBushAssetUtility
     public const string DefaultLeafTexturePath = "Assets/FloraForge/Textures/BushDummyLeafTexture.asset";
     public const string DefaultLeafMaterialPath = "Assets/FloraForge/Materials/BushLeafMaterial.mat";
     public const string DefaultLeafShaderPath = "Assets/FloraForge/Shaders/FloraForgeBushLeaf.shader";
+    public const string DefaultVolumeMeshPath = "Assets/FloraForge/Meshes/BushDummyVolume.asset";
     private const string DefaultLeafMeshName = "BushDummyLeaf";
     private const string DefaultLeafTextureName = "BushDummyLeafTexture";
     private const string DefaultLeafMaterialName = "BushLeafMaterial";
+    private const string DefaultVolumeMeshName = "BushDummyVolume";
 
     [MenuItem("Tools/FloraForge/Bush/Create Default Bush Assets")]
     public static void CreateDefaultBushAssets()
@@ -19,11 +21,13 @@ public static class FloraForgeBushAssetUtility
         EnsureAssetFolders();
 
         var mesh = CreateOrUpdateDummyLeafMesh();
+        var volumeMesh = CreateOrUpdateDummyVolumeMesh();
         var texture = CreateOrUpdateDummyLeafTexture();
         var shader = LoadBushLeafShader();
         CreateOrUpdateLeafMaterial(shader, texture);
 
         EditorUtility.SetDirty(mesh);
+        EditorUtility.SetDirty(volumeMesh);
         EditorUtility.SetDirty(texture);
         AssetDatabase.SaveAssets();
         AssetDatabase.Refresh();
@@ -57,6 +61,7 @@ public static class FloraForgeBushAssetUtility
         generator.leafMesh = AssetDatabase.LoadAssetAtPath<Mesh>(DefaultLeafMeshPath);
         generator.leafTexture = AssetDatabase.LoadAssetAtPath<Texture2D>(DefaultLeafTexturePath);
         generator.leafMaterialOverride = AssetDatabase.LoadAssetAtPath<Material>(DefaultLeafMaterialPath);
+        generator.volumeMesh = AssetDatabase.LoadAssetAtPath<Mesh>(DefaultVolumeMeshPath);
 
         EditorUtility.SetDirty(generator);
     }
@@ -149,6 +154,115 @@ public static class FloraForgeBushAssetUtility
         return mesh;
     }
 
+    private static Mesh CreateOrUpdateDummyVolumeMesh()
+    {
+        const int latitudeSegments = 8;
+        const int longitudeSegments = 18;
+        const float halfWidth = 1.0f;
+        const float halfDepth = 1.0f;
+        const float height = 1.0f;
+        const float roundness = 0.36f;
+
+        var vertices = new List<Vector3>((latitudeSegments + 1) * longitudeSegments);
+        var normals = new List<Vector3>(vertices.Capacity);
+        var uvs = new List<Vector2>(vertices.Capacity);
+        var triangles = new List<int>(latitudeSegments * longitudeSegments * 6);
+
+        for (var y = 0; y <= latitudeSegments; y++)
+        {
+            var v = y / (float)latitudeSegments;
+            var yPos = Mathf.Lerp(0.0f, height, v);
+            var dome = Mathf.Sqrt(Mathf.Max(0.0f, 1.0f - Mathf.Pow((v - 0.42f) / 0.72f, 2.0f)));
+            var squareBlend = Mathf.SmoothStep(0.0f, 1.0f, dome);
+            var rowWidth = Mathf.Lerp(0.42f, halfWidth, squareBlend);
+            var rowDepth = Mathf.Lerp(0.34f, halfDepth, squareBlend);
+            rowWidth *= Mathf.Lerp(0.78f, 1.0f, Mathf.Sin(v * Mathf.PI));
+            rowDepth *= Mathf.Lerp(0.72f, 1.0f, Mathf.Sin(v * Mathf.PI));
+
+            for (var x = 0; x < longitudeSegments; x++)
+            {
+                var u = x / (float)longitudeSegments;
+                var angle = u * Mathf.PI * 2.0f;
+                var circle = new Vector2(Mathf.Cos(angle), Mathf.Sin(angle));
+                var roundedSquare = RoundedSquareDirection(circle, roundness);
+                var position = new Vector3(roundedSquare.x * rowWidth, yPos, roundedSquare.y * rowDepth);
+                var normal = new Vector3(position.x / Mathf.Max(0.001f, halfWidth), Mathf.Lerp(-0.15f, 0.85f, v), position.z / Mathf.Max(0.001f, halfDepth)).normalized;
+                vertices.Add(position);
+                normals.Add(normal);
+                uvs.Add(new Vector2(u, v));
+            }
+        }
+
+        var bottomCenterIndex = vertices.Count;
+        vertices.Add(new Vector3(0.0f, 0.0f, 0.0f));
+        normals.Add(Vector3.down);
+        uvs.Add(new Vector2(0.5f, 0.0f));
+
+        var topCenterIndex = vertices.Count;
+        vertices.Add(new Vector3(0.0f, height, 0.0f));
+        normals.Add(Vector3.up);
+        uvs.Add(new Vector2(0.5f, 1.0f));
+
+        for (var y = 0; y < latitudeSegments; y++)
+        {
+            for (var x = 0; x < longitudeSegments; x++)
+            {
+                var nextX = (x + 1) % longitudeSegments;
+                var a = y * longitudeSegments + x;
+                var b = y * longitudeSegments + nextX;
+                var c = (y + 1) * longitudeSegments + x;
+                var d = (y + 1) * longitudeSegments + nextX;
+                triangles.Add(a);
+                triangles.Add(c);
+                triangles.Add(b);
+                triangles.Add(b);
+                triangles.Add(c);
+                triangles.Add(d);
+            }
+        }
+
+        for (var x = 0; x < longitudeSegments; x++)
+        {
+            var nextX = (x + 1) % longitudeSegments;
+            triangles.Add(bottomCenterIndex);
+            triangles.Add(nextX);
+            triangles.Add(x);
+
+            var topA = latitudeSegments * longitudeSegments + x;
+            var topB = latitudeSegments * longitudeSegments + nextX;
+            triangles.Add(topA);
+            triangles.Add(topB);
+            triangles.Add(topCenterIndex);
+        }
+
+        var mesh = new Mesh { name = DefaultVolumeMeshName };
+        mesh.SetVertices(vertices);
+        mesh.SetNormals(normals);
+        mesh.SetUVs(0, uvs);
+        mesh.SetTriangles(triangles, 0);
+        mesh.RecalculateBounds();
+
+        AssetDatabase.DeleteAsset(DefaultVolumeMeshPath);
+        AssetDatabase.CreateAsset(mesh, DefaultVolumeMeshPath);
+        EditorUtility.SetDirty(mesh);
+        AssetDatabase.SaveAssetIfDirty(mesh);
+        AssetDatabase.ImportAsset(DefaultVolumeMeshPath, ImportAssetOptions.ForceSynchronousImport);
+        return mesh;
+    }
+
+    private static Vector2 RoundedSquareDirection(Vector2 direction, float roundness)
+    {
+        if (direction.sqrMagnitude < 0.0001f)
+        {
+            return Vector2.right;
+        }
+
+        direction.Normalize();
+        var maxAxis = Mathf.Max(Mathf.Abs(direction.x), Mathf.Abs(direction.y));
+        var square = direction / Mathf.Max(0.0001f, maxAxis);
+        return Vector2.Lerp(square, direction, Mathf.Clamp01(roundness));
+    }
+
     private static Texture2D CreateOrUpdateDummyLeafTexture()
     {
         const int width = 64;
@@ -227,6 +341,7 @@ public static class FloraForgeBushAssetUtility
         material.SetTexture("_BaseMap", texture);
         material.SetColor("_BaseColor", Color.white);
         material.SetFloat("_ShadowMultiplier", 0.64f);
+        material.SetFloat("_DebugVertexColor", 1.0f);
         material.enableInstancing = true;
         EditorUtility.SetDirty(material);
         return material;
