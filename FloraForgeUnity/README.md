@@ -20,3 +20,7 @@ The generator creates a small wooden facade with procedural climbing vines, hang
 ## First target
 
 This version favors fast iteration over production rendering. The next production step is to replace generated leaf and flower cards with authored meshes/materials, then batch vegetation into combined meshes or GPU instancing.
+
+## Bush Generator Notes
+
+Current bush generator art and placement requirements are tracked in `..\docs\bush-generator-request.md`.

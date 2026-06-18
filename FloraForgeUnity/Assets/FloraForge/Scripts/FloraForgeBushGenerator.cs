@@ -7,7 +7,7 @@ namespace FloraForge
     public sealed class FloraForgeBushGenerator : MonoBehaviour
     {
         private const string GeneratedRootName = "__FloraForgeBushGenerated";
-        private const int GeneratorVersion = 11;
+        private const int GeneratorVersion = 14;
 
         [Header("Leaf Assets")]
         public Mesh leafMesh;
@@ -37,12 +37,16 @@ namespace FloraForge
         [Min(1)] public int minLeavesPerCluster = 5;
         [Min(1)] public int maxLeavesPerCluster = 10;
         [Range(0.0f, 0.35f)] public float clusterSpread = 0.14f;
-        [Range(0.0f, 1.0f)] public float clusterFan = 0.62f;
+        [Range(0.0f, 1.0f)] public float clusterScatter = 0.62f;
 
         [Header("Layer Depth")]
         [Range(0.0f, 0.35f)] public float layerShellSeparation = 0.18f;
         [Range(0.0f, 0.35f)] public float layerFrontBackSeparation = 0.16f;
         [Range(0.0f, 0.25f)] public float layerHeightSeparation = 0.08f;
+        [Range(0.05f, 0.8f)] public float coreClusterRadius = 0.38f;
+        [Range(0.2f, 1.5f)] public float innerLayerLeafScale = 1.05f;
+        [Range(0.2f, 1.5f)] public float middleLayerLeafScale = 0.88f;
+        [Range(0.2f, 1.5f)] public float outerLayerLeafScale = 0.58f;
 
         [Header("Crown Fill")]
         [Range(0.0f, 0.5f)] public float crownFillFraction = 0.24f;
@@ -179,6 +183,15 @@ namespace FloraForge
                 };
             }
 
+            if (debugSpectrumTint && !material.HasProperty("_DebugVertexColor"))
+            {
+                var debugShader = Shader.Find("FloraForge/Bush Leaf Vertex Color");
+                if (debugShader != null)
+                {
+                    material.shader = debugShader;
+                }
+            }
+
             ApplyLeafTexture(material);
             return material;
         }
@@ -256,9 +269,12 @@ namespace FloraForge
             {
                 var crownCluster = Random01(random) < crownFillFraction;
                 var layerRoll = Random01(random);
-                var layer = crownCluster ? 2 : layerRoll < 0.32f ? 0 : layerRoll < 0.78f ? 1 : 2;
+                var layer = crownCluster ? 2 : layerRoll < 0.4f ? 0 : layerRoll < 0.86f ? 1 : 2;
                 var clusterSize = Mathf.Min(count - leaf, random.Next(minLeavesPerCluster, maxLeavesPerCluster + 1));
-                var clusterSample = crownCluster
+                var coreCluster = layer == 0;
+                var clusterSample = coreCluster
+                    ? SampleCoreInterior(random)
+                    : crownCluster
                     ? SampleCrownTop(random)
                     : volumeSamples.Count > 0
                     ? SampleVolume(volumeSamples, layer, random)
@@ -289,37 +305,64 @@ namespace FloraForge
                 clusterTangent.Normalize();
 
                 var clusterNormal = clusterSample.Normal.sqrMagnitude > 0.001f ? clusterSample.Normal.normalized : Vector3.up;
-                var layerDepth = layer == 0 ? -1.0f : layer == 1 ? 0.0f : 1.0f;
-                var layerZBias = layer == 0 ? depth * layerFrontBackSeparation : layer == 2 ? -depth * layerFrontBackSeparation : 0.0f;
-                var layerYBias = layer == 0 ? -height * layerHeightSeparation : layer == 2 ? height * layerHeightSeparation : 0.0f;
-                var layerShellBias = clusterNormal * (layerDepth * layerShellSeparation * Mathf.Max(radius, depth));
+                var layerDepth = coreCluster ? 0.0f : layer == 1 ? 0.0f : 1.0f;
+                var layerZBias = coreCluster ? 0.0f : layer == 2 ? -depth * layerFrontBackSeparation : 0.0f;
+                var layerYBias = coreCluster ? -height * layerHeightSeparation * 0.35f : layer == 2 ? height * layerHeightSeparation : 0.0f;
+                var layerShellBias = coreCluster ? Vector3.zero : clusterNormal * (layerDepth * layerShellSeparation * Mathf.Max(radius, depth));
                 var clusterBase = clusterSample.Position
                     + layerShellBias
                     + new Vector3(0.0f, layerYBias, layerZBias)
-                    - clusterRadial * RandomRange(random, 0.015f, 0.055f) * Mathf.Max(radius, depth);
-                var branchLean = crownCluster
+                    - clusterRadial * RandomRange(random, coreCluster ? 0.0f : 0.015f, coreCluster ? 0.018f : 0.055f) * Mathf.Max(radius, depth);
+                var branchLean = coreCluster
+                    ? (clusterRadial * RandomRange(random, 0.16f, 0.38f) + Vector3.up * RandomRange(random, -0.06f, 0.08f)).normalized
+                    : crownCluster
                     ? (clusterRadial * RandomRange(random, 0.52f, 0.9f) + Vector3.up * RandomRange(random, 0.08f, 0.28f)).normalized
                     : (clusterRadial * RandomRange(random, 0.45f, 0.85f) + Vector3.up * RandomRange(random, -0.04f, 0.18f)).normalized;
-                var fanStart = crownCluster ? RandomRange(random, -0.5f, 0.05f) : RandomRange(random, -0.75f, 0.25f);
-                var fanStep = clusterSize <= 1 ? 0.0f : 1.0f / (clusterSize - 1);
+                var branchSide = Vector3.ProjectOnPlane(
+                    clusterTangent + RandomHorizontal(random) * RandomRange(random, 0.15f, 0.5f),
+                    clusterNormal);
+                if (branchSide.sqrMagnitude < 0.001f)
+                {
+                    branchSide = clusterTangent;
+                }
+
+                branchSide.Normalize();
+
+                var branchForward = (clusterRadial * RandomRange(random, coreCluster ? 0.18f : 0.62f, coreCluster ? 0.48f : 1.0f)
+                    + branchSide * RandomRange(random, -0.22f, 0.22f)
+                    + Vector3.up * RandomRange(random, crownCluster ? 0.02f : -0.08f, crownCluster ? 0.2f : 0.12f)).normalized;
+                var branchTwist = RandomRange(random, 0.0f, Mathf.PI * 2.0f);
+                const float goldenAngle = 2.3999631f;
 
                 for (var clusterLeaf = 0; clusterLeaf < clusterSize; clusterLeaf++, leaf++)
                 {
-                    var fan01 = clusterSize <= 1 ? 0.5f : clusterLeaf * fanStep;
-                    var fanOffset = (fanStart + fan01) * clusterFan;
-                    var sideOffset = fanOffset * clusterSpread * fullnessSpread * Mathf.Max(radius, depth);
-                    var forwardOffset = (crownCluster ? 0.04f : 0.18f + fan01 * 0.82f) * clusterSpread * fullnessSpread * Mathf.Max(radius, depth);
-                    var randomOffset = RandomRange(random, -0.025f, 0.025f) * Mathf.Max(radius, depth);
+                    var cluster01 = clusterSize <= 1 ? 0.5f : clusterLeaf / (float)(clusterSize - 1);
+                    var branchOffset = Mathf.Lerp(0.08f, 0.88f, cluster01);
+                    var divergenceAngle = branchTwist + clusterLeaf * goldenAngle + RandomRange(random, -0.42f, 0.42f) * clusterScatter;
+                    var divergenceRadius = Mathf.Sqrt(cluster01 + RandomRange(random, 0.0f, 0.18f)) * clusterSpread * clusterScatter * (coreCluster ? 0.18f : 0.48f) * Mathf.Max(radius, depth);
+                    var lateralA = branchSide * Mathf.Cos(divergenceAngle);
+                    var lateralB = Vector3.Cross(branchForward, branchSide).normalized * Mathf.Sin(divergenceAngle);
+                    var organicLateral = lateralA + lateralB;
+                    if (organicLateral.sqrMagnitude < 0.001f)
+                    {
+                        organicLateral = branchSide;
+                    }
+
+                    organicLateral.Normalize();
+
+                    var sideOffset = divergenceRadius;
+                    var forwardOffset = (coreCluster ? RandomRange(random, -0.08f, 0.12f) : crownCluster ? 0.06f + cluster01 * 0.18f : branchOffset) * clusterSpread * fullnessSpread * Mathf.Max(radius, depth);
+                    var randomOffset = RandomRange(random, coreCluster ? -0.014f : -0.028f, coreCluster ? 0.014f : 0.028f) * Mathf.Max(radius, depth);
                     var sampledCenter = clusterBase
-                        + clusterRadial * forwardOffset
-                        + clusterTangent * sideOffset
+                        + branchForward * forwardOffset
+                        + organicLateral * sideOffset
                         + clusterNormal * randomOffset;
 
                     var localX = sampledCenter.x;
                     var localY = sampledCenter.y;
                     var localZ = sampledCenter.z;
                     var radius01 = Mathf.Clamp01(new Vector2(localX / Mathf.Max(0.001f, radius), localZ / Mathf.Max(0.001f, depth)).magnitude);
-                    var radial = (clusterRadial + clusterTangent * fanOffset * 0.38f).normalized;
+                    var radial = (clusterRadial + organicLateral * RandomRange(random, 0.08f, 0.28f) * clusterScatter).normalized;
                     var tangentAround = Vector3.Cross(Vector3.up, radial);
                     if (tangentAround.sqrMagnitude < 0.001f)
                     {
@@ -329,12 +372,12 @@ namespace FloraForge
                     tangentAround.Normalize();
 
                     var radialFlow = Mathf.Lerp(0.24f, 0.62f, radius01);
-                    var swirl = fanOffset * 0.42f + RandomRange(random, -0.12f, 0.12f);
+                    var swirl = Mathf.Sin(divergenceAngle) * 0.18f * clusterScatter + RandomRange(random, -0.14f, 0.14f);
                     var surfaceNormal = (clusterNormal + radial * 0.16f).normalized;
                     var leafUp = (branchLean * 0.45f + radial * radialFlow + tangentAround * swirl + Vector3.up * RandomRange(random, -0.04f, 0.12f)).normalized;
 
                     var normalSeed = Vector3.Lerp(surfaceNormal, Vector3.up, 0.28f);
-                    normalSeed += tangentAround * fanOffset * 0.28f;
+                    normalSeed += organicLateral * RandomRange(random, -0.12f, 0.24f) * clusterScatter;
                     var leafForward = Vector3.ProjectOnPlane(normalSeed, leafUp);
                     if (leafForward.sqrMagnitude < 0.001f)
                     {
@@ -351,13 +394,17 @@ namespace FloraForge
                     leafRight.Normalize();
                     leafForward = Vector3.Cross(leafRight, leafUp).normalized;
 
-                    var roll = (fanOffset * 18.0f + RandomRange(random, -12.0f, 12.0f)) * Mathf.Deg2Rad;
+                    var roll = (Mathf.Sin(divergenceAngle) * 10.0f * clusterScatter + RandomRange(random, -14.0f, 14.0f)) * Mathf.Deg2Rad;
                     var rolledRight = leafRight * Mathf.Cos(roll) + leafForward * Mathf.Sin(roll);
                     var rolledForward = Vector3.Cross(rolledRight.normalized, leafUp).normalized;
 
-                    var layerScale = layer == 0 ? RandomRange(random, 0.95f, 1.22f) : layer == 1 ? RandomRange(random, 0.78f, 1.05f) : RandomRange(random, 0.56f, 0.84f);
-                    var scale = baseScale * layerScale * Mathf.Lerp(0.82f, 1.08f, fan01);
-                    var shellOffset = layer == 0 ? -0.04f : layer == 1 ? 0.0f : 0.04f;
+                    var layerScale = layer == 0
+                        ? RandomRange(random, 0.95f, 1.22f) * innerLayerLeafScale
+                        : layer == 1
+                            ? RandomRange(random, 0.78f, 1.05f) * middleLayerLeafScale
+                            : RandomRange(random, 0.5f, 0.76f) * outerLayerLeafScale;
+                    var scale = baseScale * layerScale * Mathf.Lerp(0.86f, 1.08f, cluster01);
+                    var shellOffset = coreCluster ? -0.015f : layer == 1 ? 0.0f : 0.04f;
                     var position = sampledCenter + surfaceNormal * (shellOffset * Mathf.Max(radius, depth)) - leafUp * (sourceBounds.center.y * scale);
 
                     var topFactor = Mathf.Clamp01(localY / Mathf.Max(0.001f, height));
@@ -553,6 +600,33 @@ namespace FloraForge
             return new VolumeSamplePoint(new Vector3(localX, localY, localZ), normal);
         }
 
+        private VolumeSamplePoint SampleCoreInterior(System.Random random)
+        {
+            var angle = RandomRange(random, 0.0f, Mathf.PI * 2.0f);
+            var radius01 = Mathf.Sqrt(Random01(random)) * coreClusterRadius;
+            var localX = Mathf.Cos(angle) * radius * radius01 * RandomRange(random, 0.65f, 1.05f);
+            var localZ = Mathf.Sin(angle) * depth * radius01 * RandomRange(random, 0.65f, 1.05f);
+            var localY = height * RandomRange(random, 0.32f, 0.58f);
+
+            var radial = new Vector3(
+                localX / Mathf.Max(0.001f, radius),
+                0.0f,
+                localZ / Mathf.Max(0.001f, depth));
+            if (radial.sqrMagnitude < 0.001f)
+            {
+                radial = RandomHorizontal(random);
+            }
+
+            radial.Normalize();
+            var normal = (Vector3.up * RandomRange(random, -0.08f, 0.16f) + radial * 0.35f).normalized;
+            if (normal.sqrMagnitude < 0.001f)
+            {
+                normal = radial;
+            }
+
+            return new VolumeSamplePoint(new Vector3(localX, localY, localZ), normal.normalized);
+        }
+
         private VolumeSamplePoint SampleFallbackDome(int layer, System.Random random)
         {
             var angle = RandomRange(random, 0.0f, Mathf.PI * 2.0f);
@@ -592,9 +666,17 @@ namespace FloraForge
         {
             if (debugSpectrumTint)
             {
-                var layerBase = layer == 0 ? 0.0f : layer == 1 ? 0.34f : 0.66f;
-                var hue = Mathf.Repeat(layerBase + depthShade * 0.16f, 1.0f);
-                return Color.HSVToRGB(hue, 1.0f, 1.0f);
+                if (layer == 0)
+                {
+                    return Color.Lerp(Color.red, new Color(1.0f, 0.0f, 0.65f), depthShade * 0.35f);
+                }
+
+                if (layer == 1)
+                {
+                    return Color.Lerp(Color.green, Color.yellow, depthShade * 0.35f);
+                }
+
+                return Color.Lerp(Color.blue, Color.cyan, depthShade * 0.35f);
             }
 
             var shadow = new Color(0.22f, 0.42f, 0.34f, 1.0f);
