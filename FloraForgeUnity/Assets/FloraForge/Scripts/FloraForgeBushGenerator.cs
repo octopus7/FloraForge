@@ -7,7 +7,7 @@ namespace FloraForge
     public sealed class FloraForgeBushGenerator : MonoBehaviour
     {
         private const string GeneratedRootName = "__FloraForgeBushGenerated";
-        private const int GeneratorVersion = 2;
+        private const int GeneratorVersion = 3;
 
         [Header("Leaf Assets")]
         public Mesh leafMesh;
@@ -129,7 +129,7 @@ namespace FloraForge
             var sourceBounds = leafMesh.bounds;
             var sourceHeight = Mathf.Max(0.001f, sourceBounds.size.y);
             var sourceWidth = Mathf.Max(0.001f, sourceBounds.size.x);
-            var normalizedLeafHeight = 0.34f;
+            var normalizedLeafHeight = 0.26f;
             var baseScale = normalizedLeafHeight / sourceHeight;
             if (sourceWidth * baseScale > 0.22f)
             {
@@ -147,50 +147,79 @@ namespace FloraForge
             for (var leaf = 0; leaf < count; leaf++)
             {
                 var angle = RandomRange(random, 0.0f, Mathf.PI * 2.0f);
-                var radius01 = Mathf.Sqrt(Random01(random));
-                var ringNoise = RandomRange(random, 0.78f, 1.08f);
+                var radius01 = Mathf.Pow(Random01(random), 0.46f);
+                var ringNoise = RandomRange(random, 0.72f, 1.08f);
                 var localX = Mathf.Cos(angle) * radius * radius01 * ringNoise;
-                var localZ = Mathf.Sin(angle) * depth * radius01 * RandomRange(random, 0.78f, 1.12f);
+                var localZ = Mathf.Sin(angle) * depth * radius01 * RandomRange(random, 0.72f, 1.1f);
                 var centerFactor = 1.0f - radius01;
-                var localY = Mathf.Max(0.02f, centerFactor * height + RandomRange(random, -height * 0.08f, height * 0.08f));
-                var position = new Vector3(localX, localY, localZ);
+                var localY = height * Mathf.Lerp(0.32f, 0.82f, Mathf.Pow(centerFactor, 0.55f));
+                localY += RandomRange(random, -height * 0.055f, height * 0.055f);
+                localY = Mathf.Clamp(localY, height * 0.22f, height * 0.9f);
 
-                var outward = new Vector3(
+                var radial = new Vector3(
                     localX / Mathf.Max(0.001f, radius),
-                    Mathf.Lerp(0.18f, 0.72f, centerFactor),
+                    0.0f,
                     localZ / Mathf.Max(0.001f, depth));
-                if (outward.sqrMagnitude < 0.001f)
+                if (radial.sqrMagnitude < 0.001f)
                 {
-                    outward = Vector3.up;
+                    radial = RandomHorizontal(random);
                 }
 
-                outward.Normalize();
+                radial.Normalize();
 
-                var yaw = Mathf.Atan2(outward.x, outward.z) * Mathf.Rad2Deg + RandomRange(random, -42.0f, 42.0f);
-                var pitch = RandomRange(random, 10.0f, 35.0f);
-                var roll = RandomRange(random, -20.0f, 20.0f);
-                var rotation = Quaternion.Euler(pitch, yaw, roll);
-                var scale = baseScale * RandomRange(random, 0.72f, 1.18f);
-                var matrix = Matrix4x4.TRS(position, rotation, Vector3.one * scale);
+                var spread = Mathf.Lerp(0.42f, 1.05f, radius01);
+                var droop = Mathf.Lerp(0.1f, 0.72f, radius01);
+                var lift = centerFactor * 0.18f;
+                var leafUp = (radial * spread + Vector3.down * droop + Vector3.up * lift).normalized;
+
+                var normalSeed = Vector3.Lerp(Vector3.back, radial + Vector3.up * 0.45f, 0.42f);
+                normalSeed += RandomHorizontal(random) * 0.16f;
+                var leafForward = Vector3.ProjectOnPlane(normalSeed, leafUp);
+                if (leafForward.sqrMagnitude < 0.001f)
+                {
+                    leafForward = Vector3.ProjectOnPlane(Vector3.back, leafUp);
+                }
+
+                leafForward.Normalize();
+                var leafRight = Vector3.Cross(leafUp, leafForward);
+                if (leafRight.sqrMagnitude < 0.001f)
+                {
+                    leafRight = Vector3.right;
+                }
+
+                leafRight.Normalize();
+                leafForward = Vector3.Cross(leafRight, leafUp).normalized;
+
+                var roll = RandomRange(random, -24.0f, 24.0f) * Mathf.Deg2Rad;
+                var rolledRight = leafRight * Mathf.Cos(roll) + leafForward * Mathf.Sin(roll);
+                var rolledForward = Vector3.Cross(rolledRight.normalized, leafUp).normalized;
+
+                var scale = baseScale * RandomRange(random, 0.66f, 1.05f);
+                var position = new Vector3(localX, localY, localZ) - leafUp * sourceBounds.min.y * scale;
 
                 var topFactor = Mathf.Clamp01(localY / Mathf.Max(0.001f, height));
                 var frontFactor = Mathf.InverseLerp(depth, -depth, localZ);
                 var outerFactor = Mathf.Clamp01(radius01);
-                var depthShade = Mathf.Clamp01(0.32f + topFactor * 0.34f + frontFactor * 0.24f + outerFactor * 0.14f);
+                var depthShade = Mathf.Clamp01(0.28f + topFactor * 0.28f + frontFactor * 0.23f + outerFactor * 0.16f);
                 var tint = ChooseLeafTint(depthShade, random);
 
                 var vertexOffset = vertices.Count;
                 for (var v = 0; v < sourceVertices.Length; v++)
                 {
-                    vertices.Add(matrix.MultiplyPoint3x4(sourceVertices[v]));
+                    var sourceVertex = sourceVertices[v];
+                    vertices.Add(position
+                        + rolledRight * (sourceVertex.x * scale)
+                        + leafUp * (sourceVertex.y * scale)
+                        + rolledForward * (sourceVertex.z * scale));
 
                     if (sourceNormals != null && sourceNormals.Length == sourceVertices.Length)
                     {
-                        normals.Add(matrix.MultiplyVector(sourceNormals[v]).normalized);
+                        var sourceNormal = sourceNormals[v];
+                        normals.Add((rolledRight * sourceNormal.x + leafUp * sourceNormal.y + rolledForward * sourceNormal.z).normalized);
                     }
                     else
                     {
-                        normals.Add(rotation * Vector3.forward);
+                        normals.Add(rolledForward);
                     }
 
                     uvs.Add(sourceUvs != null && sourceUvs.Length == sourceVertices.Length ? sourceUvs[v] : Vector2.zero);
@@ -240,6 +269,12 @@ namespace FloraForge
         private static float RandomRange(System.Random random, float min, float max)
         {
             return min + (float)random.NextDouble() * (max - min);
+        }
+
+        private static Vector3 RandomHorizontal(System.Random random)
+        {
+            var angle = RandomRange(random, 0.0f, Mathf.PI * 2.0f);
+            return new Vector3(Mathf.Cos(angle), 0.0f, Mathf.Sin(angle));
         }
 
         private static void DestroyUnityObject(Object target)
